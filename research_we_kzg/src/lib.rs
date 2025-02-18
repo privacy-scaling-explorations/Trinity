@@ -7,4 +7,8 @@ mod laconic_ot;
 
 pub use laconic_ot::{Choice, LaconicOTRecv, LaconicOTSender, Msg};
 
+pub use kzg_utils::plain_kzg_com;
+
 pub use kzg_types::CommitmentKey;
+
+pub use kzg_fk_open::all_openings_single;

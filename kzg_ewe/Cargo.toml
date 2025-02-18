@@ -7,7 +7,12 @@ edition = "2021"
 
 [dependencies]
 laconic-ot = { path = "../research_we_kzg" }
-halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", branch = "main" }
-halo2_middleware = { git = "https://github.com/privacy-scaling-explorations/halo2.git", branch = "main" }
+halo2_we_kzg = { path = "../halo2_we_kzg" }
 rand = "0.8"
-ark-ec = "0.5.0"
+ark-ec = "0.4.0"
+ark-ff = "0.4.0"
+ark-bn254 = "0.4.0"
+ark-poly = "0.4.0"
+
+[patch.crates-io]
+halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }

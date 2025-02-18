@@ -1,0 +1,20 @@
+[package]
+name = "halo2_we_kzg"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+halo2_proofs = { git = "https://github.com/Meyanis95/halo2.git", branch = "main", features = ["derive_serde"] }
+halo2_middleware = { git = "https://github.com/Meyanis95/halo2.git", branch = "main" }
+halo2_backend = { git = "https://github.com/Meyanis95/halo2.git", package = "halo2_backend", branch = "main" }
+halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
+rand = "0.8"
+blake3 = "1.5.5"
+bincode = "1.3.3"
+
+[patch."https://github.com/privacy-scaling-explorations/halo2.git"]
+halo2_backend = { git = "https://github.com/Meyanis95/halo2.git", package = "halo2_backend", branch = "main" }
+halo2_middleware = { git = "https://github.com/Meyanis95/halo2.git", branch = "main" }
+
+[patch.crates-io]
+halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
