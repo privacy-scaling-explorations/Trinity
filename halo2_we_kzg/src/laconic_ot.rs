@@ -1,6 +1,9 @@
 use std::marker::PhantomData;
 
-use crate::poly_op::{eval_polynomial, poly_divide, serialize_cubic_ext_field};
+use crate::{
+    poly_op::{eval_polynomial, poly_divide, serialize_cubic_ext_field},
+    Halo2Params,
+};
 use halo2_backend::poly::{kzg::commitment::ParamsKZG, Coeff, Polynomial};
 use halo2_middleware::zal::impls::PlonkEngineConfig;
 use halo2_proofs::{
@@ -15,7 +18,6 @@ use halo2_proofs::{
     },
 };
 use halo2curves::bn256::Gt;
-use rand::rngs::OsRng;
 use rand::Rng;
 
 const MSG_SIZE: usize = 32;
@@ -55,11 +57,10 @@ impl Choice {
 
 #[derive(Debug, Clone)]
 pub struct LaconicOTRecv {
-    params: ParamsKZG<Bn256>,
     qs: Vec<G1>,
     com: G1,
     bits: Vec<Choice>,
-    domain: EvaluationDomain<Fr>,
+    halo2params: Halo2Params,
 }
 
 #[derive(Debug, Clone)]
@@ -70,9 +71,7 @@ pub struct LaconicOTSender {
 }
 
 impl LaconicOTRecv {
-    pub fn new(bits: &[Choice], k: u32) -> Self {
-        let params: ParamsKZG<Bn256> = ParamsKZG::setup(k, &mut OsRng);
-
+    pub fn new(halo2params: Halo2Params, bits: &[Choice]) -> Self {
         let elems: Vec<_> = bits
             .iter()
             .map(|b| {
@@ -95,10 +94,7 @@ impl LaconicOTRecv {
         let engine = PlonkEngineConfig::build_default::<G1Affine>();
         let alpha = Blind::default();
 
-        // Create evaluation domain
-        let domain = EvaluationDomain::new(1, k);
-
-        let mut a = domain.empty_lagrange();
+        let mut a = halo2params.domain.empty_lagrange();
         for (i, a) in a.iter_mut().enumerate() {
             if i < elems.len() {
                 *a = elems[i];
@@ -108,15 +104,17 @@ impl LaconicOTRecv {
         }
 
         // compute commitment
-        let commitment = params.commit_lagrange(&engine.msm_backend, &a, alpha);
+        let commitment = halo2params
+            .params
+            .commit_lagrange(&engine.msm_backend, &a, alpha);
 
         // Convert polynomial f from Lagrange to coefficient form.
-        let poly_coeff = domain.lagrange_to_coeff(a.clone());
+        let poly_coeff = halo2params.domain.lagrange_to_coeff(a.clone());
 
         // Get domain points
         let n = elems.len();
         let points: Vec<Fr> = (0..n)
-            .map(|i| domain.get_omega().pow(&[i as u64]))
+            .map(|i| halo2params.domain.get_omega().pow(&[i as u64]))
             .collect();
 
         // Openings at the points
@@ -134,17 +132,18 @@ impl LaconicOTRecv {
                 };
 
                 // Commit to the quotient polynomial (in coefficient form).
-                let point = params.commit(&engine.msm_backend, &quotient_poly, alpha);
+                let point = halo2params
+                    .params
+                    .commit(&engine.msm_backend, &quotient_poly, alpha);
                 point
             })
             .collect();
 
         Self {
-            params,
             qs,
             com: commitment.into(),
             bits: bits.to_vec(),
-            domain,
+            halo2params,
         }
     }
 
@@ -236,17 +235,21 @@ impl LaconicOTSender {
 
 #[test]
 fn test_laconic_ot() {
+    use rand::rngs::OsRng;
+
     let rng = &mut OsRng;
 
     let degree = 4;
     let bitvector = [Choice::Zero, Choice::One, Choice::Zero, Choice::One];
 
-    let receiver = LaconicOTRecv::new(&bitvector, degree);
+    let halo2params = Halo2Params::setup(rng, degree).unwrap();
+
+    let receiver = LaconicOTRecv::new(halo2params, &bitvector);
 
     let sender = LaconicOTSender::new(
-        receiver.params.clone(),
+        receiver.halo2params.params.clone(),
         receiver.commitment(),
-        receiver.domain.clone(),
+        receiver.halo2params.domain.clone(),
     );
 
     let m0 = [0u8; MSG_SIZE];

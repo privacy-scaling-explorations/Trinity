@@ -1,94 +1,64 @@
-// use ark_bn254::{Bn254, Fr as bn254Fr};
-// use ark_ff::Field;
-// use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
-// use halo2_proofs::{
-//     halo2curves::bn256::{Bn256, Fr as bn256Fr, G1Affine},
-//     poly::kzg::commitment::ParamsKZG,
-// };
-// use laconic_ot::{plain_kzg_com, Choice, CommitmentKey, all_openings_single};
-// use rand::{rngs::OsRng, Rng};
+use ark_bn254::{Bn254, Fr};
+use ark_poly::Radix2EvaluationDomain;
+// Assume these are from your separate crates:
+use halo2_we_kzg::{Halo2Params, LaconicOTRecv as Halo2OTRecv};
+use laconic_ot::{Choice, CommitmentKey, LaconicOTRecv as PlainOTRecv};
+use rand::rngs::OsRng;
 
-// use crate::{halo2_circuit::BitvectorCommitmentCircuit, kzg_params::CurveAdapter};
+pub enum KZGType {
+    Plain,
+    Halo2,
+}
 
-// pub enum CommitmentStrategy {
-//     PlainKZG,
-//     Halo2Circuit,
-// }
+pub enum OTRecv<'a> {
+    Plain(PlainOTRecv<'a, Bn254, Radix2EvaluationDomain<Fr>>),
+    Halo2(Halo2OTRecv),
+}
 
-// pub struct BitvectorCommitment {
-//     pub bits: Vec<bool>,
-//     pub commitment: G1Affine,
-//     pub halo2_params: ParamsKZG<Bn256>,
-//     pub ck: CommitmentKey<Bn254, Radix2EvaluationDomain<bn254Fr>>,
-// }
+pub enum TrinityCommitmentKey {
+    Plain(CommitmentKey<Bn254, Radix2EvaluationDomain<Fr>>),
+    Halo2(Halo2Params),
+}
 
-// impl BitvectorCommitment {
+impl TrinityCommitmentKey {
+    pub fn setup(&self, rng: &mut OsRng, message_length: usize) -> TrinityCommitmentKey {
+        match self {
+            TrinityCommitmentKey::Plain(_) => {
+                // Supply the required arguments and unwrap the Result
+                let ck =
+                    CommitmentKey::setup(rng, message_length).expect("CommitmentKey setup failed");
+                TrinityCommitmentKey::Plain(ck)
+            }
+            TrinityCommitmentKey::Halo2(_) => {
+                let params =
+                    Halo2Params::setup(rng, message_length).expect("Halo2Params setup failed");
+                TrinityCommitmentKey::Halo2(params)
+            }
+        }
+    }
+}
 
-//     pub fn new(bits: Vec<bool>, strategy: CommitmentStrategy, k: u32) -> Self {
-//         let message_length = bits.len();
-//         let rng = &mut OsRng;
-//         let ck =
-//             CommitmentKey::<Bn254, Radix2EvaluationDomain<bn254Fr>>::setup(rng, message_length)
-//                 .expect("Failed to setup CommitmentKey");
+impl<'a> OTRecv<'a> {
+    pub fn setup(kzg_type: KZGType, message_length: usize) -> Self {
+        let rng = &mut OsRng;
 
-//         // Convert CommitmentKey parameters to Halo2 format
-//         let g = CurveAdapter::convert_g1_vec(&ck.u);
-//         let g_lagrange = CurveAdapter::convert_g1_vec(&ck.lagranges);
-//         let g2 = CurveAdapter::convert_g2_element(&ck.g2);
-//         let s_g2 = CurveAdapter::convert_g2_element(&ck.r);
+        match kzg_type {
+            KZGType::Plain => OTRecv::Plain(PlainOTRecv::new(rng, message_length)),
+            KZGType::Halo2 => OTRecv::Halo2(Halo2OTRecv::new(bits)),
+        }
+    }
 
-//         let halo2_params = ParamsKZG::from_parts(_, k, g, Some(g_lagrange), g2, s_g2);
+    pub fn commitment(&self) -> CommitmentType {
+        match self {
+            OTRecv::Plain(inner) => inner.commitment(),
+            OTRecv::Halo2(inner) => inner.commitment(),
+        }
+    }
 
-//         let commitment = match strategy {
-//             CommitmentStrategy::PlainKZG => Self::commit_plain_kzg(&ck, &bits),
-//             CommitmentStrategy::Halo2Circuit => Self::commit_halo2(&bits, &halo2_params),
-//         };
-
-//         Self {
-//             bits,
-//             commitment,
-//             halo2_params,
-//             ck,
-//         }
-//     }
-
-//     fn commit_plain_kzg(
-//         ck: &CommitmentKey<Bn254, Radix2EvaluationDomain<bn254Fr>>,
-//         bits: &[bool],
-//     ) -> G1Affine {
-//         let bitvector: Vec<bn254Fr> = bits
-//             .iter()
-//             .map(|&b| if b { bn254Fr::from(1) } else { bn254Fr::from(0) })
-//             .collect();
-
-//         // pad with random elements
-//         assert!(bitvector.len() <= ck.domain.size());
-//         // bitvector.resize_with(ck.domain.size(), || {
-//         //     E::ScalarField::rand(&mut ark_std::test_rng())
-//         // });
-
-//         // compute commitment
-//         let com = plain_kzg_com(ck, &bitvector);
-
-//         // compute all openings
-//         let qs = all_openings_single::<E, D>(&ck.y, &ck.domain, &bitvector);
-
-//         {ck,
-//             qs,
-//             com: com.into(),
-//             bits: bits.to_vec()}
-//     }
-
-//     fn commit_halo2(bits: &[bool], params: &KZGParamsWrapper) -> G1Affine {
-//         let circuit = BitvectorCommitmentCircuit {
-//             bitvector: bits
-//                 .iter()
-//                 .map(|&b| if b { bn256Fr::one() } else { bn256Fr::zero() })
-//                 .collect(),
-//         };
-
-//         // Use params.get_params() for Halo2 circuit commitment
-//         // Implement Halo2 commitment logic
-//         unimplemented!()
-//     }
-// }
+    pub fn recv(&self, index: usize, msg: MsgType) -> [u8; MSG_SIZE] {
+        match self {
+            OTRecv::Plain(inner) => inner.recv(index, msg),
+            OTRecv::Halo2(inner) => inner.recv(index, msg),
+        }
+    }
+}
