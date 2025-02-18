@@ -11,7 +11,6 @@ pub struct Halo2Params {
 impl Halo2Params {
     pub fn setup<R: rand::Rng>(rng: &mut R, k: usize) -> Result<Halo2Params, ()> {
         let params: ParamsKZG<Bn256> = ParamsKZG::setup(k as u32, rng);
-        // Create evaluation domain
         let domain = EvaluationDomain::new(1, k as u32);
 
         Ok(Halo2Params { k, domain, params })
