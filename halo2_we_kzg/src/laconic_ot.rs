@@ -36,9 +36,11 @@ fn fq12_to_bytes(gt: Gt) -> Vec<u8> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Msg<G2Affine> {
+pub struct Msg {
     h: [(G2Affine, [u8; MSG_SIZE]); 2],
 }
+
+pub type Com = G1;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Choice {
@@ -58,7 +60,7 @@ impl Choice {
 #[derive(Debug, Clone)]
 pub struct LaconicOTRecv {
     qs: Vec<G1>,
-    com: G1,
+    com: Com,
     bits: Vec<Choice>,
     halo2params: Halo2Params,
 }
@@ -66,7 +68,7 @@ pub struct LaconicOTRecv {
 #[derive(Debug, Clone)]
 pub struct LaconicOTSender {
     params: ParamsKZG<Bn256>,
-    com: G1,
+    com: Com,
     domain: EvaluationDomain<Fr>,
 }
 
@@ -147,7 +149,7 @@ impl LaconicOTRecv {
         }
     }
 
-    pub fn recv(&self, i: usize, msg: Msg<G2Affine>) -> [u8; MSG_SIZE] {
+    pub fn recv(&self, i: usize, msg: Msg) -> [u8; MSG_SIZE] {
         let j: usize = if self.bits[i] == Choice::One { 1 } else { 0 };
         let h = msg.h[j].0;
         let c = msg.h[j].1;
@@ -156,7 +158,7 @@ impl LaconicOTRecv {
         decrypt::<MSG_SIZE>(m, &c)
     }
 
-    pub fn commitment(&self) -> G1 {
+    pub fn commitment(&self) -> Com {
         self.com
     }
 }
@@ -184,7 +186,7 @@ fn decrypt<const N: usize>(pad: Gt, ct: &[u8; N]) -> [u8; N] {
 }
 
 impl LaconicOTSender {
-    pub fn new(params: ParamsKZG<Bn256>, com: G1, domain: EvaluationDomain<Fr>) -> Self {
+    pub fn new(params: ParamsKZG<Bn256>, com: Com, domain: EvaluationDomain<Fr>) -> Self {
         Self {
             params,
             com,
@@ -198,7 +200,7 @@ impl LaconicOTSender {
         i: usize,
         m0: [u8; MSG_SIZE],
         m1: [u8; MSG_SIZE],
-    ) -> Msg<G2Affine> {
+    ) -> Msg {
         let x = self.domain.get_omega().pow_vartime([i as u64]);
         let r0 = Fr::random(&mut *rng);
         let r1 = Fr::random(&mut *rng);

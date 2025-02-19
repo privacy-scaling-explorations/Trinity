@@ -17,6 +17,8 @@ pub enum Choice {
     One,
 }
 
+pub type Com<E: Pairing> = E::G1;
+
 impl Choice {
     pub fn random<R: Rng>(rng: &mut R) -> Self {
         let b: bool = rng.gen();
@@ -90,7 +92,7 @@ impl<'a, E: Pairing, D: EvaluationDomain<E::ScalarField>> LaconicOTRecv<'a, E, D
         decrypt::<E, MSG_SIZE>(m.0, &c)
     }
 
-    pub fn commitment(&self) -> E::G1 {
+    pub fn commitment(&self) -> Com<E> {
         self.com
     }
 }
@@ -116,7 +118,7 @@ fn decrypt<E: Pairing, const N: usize>(pad: E::TargetField, ct: &[u8; N]) -> [u8
 }
 
 impl<'a, E: Pairing, D: EvaluationDomain<E::ScalarField>> LaconicOTSender<'a, E, D> {
-    pub fn new(ck: &'a CommitmentKey<E, D>, com: E::G1) -> Self {
+    pub fn new(ck: &'a CommitmentKey<E, D>, com: Com<E>) -> Self {
         Self { ck, com }
     }
 

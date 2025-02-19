@@ -5,7 +5,7 @@ mod kzg_utils;
 
 mod laconic_ot;
 
-pub use laconic_ot::{Choice, LaconicOTRecv, LaconicOTSender, Msg};
+pub use laconic_ot::{Choice, Com, LaconicOTRecv, LaconicOTSender, Msg};
 
 pub use kzg_utils::plain_kzg_com;
 
