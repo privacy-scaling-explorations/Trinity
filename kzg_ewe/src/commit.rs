@@ -2,8 +2,7 @@ use ark_bn254::{Bn254, Fr};
 use ark_poly::Radix2EvaluationDomain;
 // Assume these are from your separate crates:
 use halo2_we_kzg::{
-    params, Com as Halo2Com, Halo2Params, LaconicOTRecv as Halo2OTRecv,
-    LaconicOTSender as Halo2OTSender,
+    Com as Halo2Com, Halo2Params, LaconicOTRecv as Halo2OTRecv, LaconicOTSender as Halo2OTSender,
 };
 use laconic_ot::{
     Choice, Com as PlainCom, CommitmentKey, LaconicOTRecv as PlainOTRecv,
@@ -41,10 +40,6 @@ pub enum TrinitySender<'a> {
 pub struct Trinity {
     mode: KZGType,
     params: TrinityParams,
-    // plain_recv: Option<PlainOTRecv<'static, Bn254, Radix2EvaluationDomain<Fr>>>,
-    // halo2_recv: Option<halo2_we_kzg::LaconicOTRecv>,
-    // plain_sender: Option<PlainOTSender<'static, Bn254, Radix2EvaluationDomain<Fr>>>,
-    // halo2_sender: Option<halo2_we_kzg::LaconicOTSender>,
 }
 
 pub enum TrinityMsg {

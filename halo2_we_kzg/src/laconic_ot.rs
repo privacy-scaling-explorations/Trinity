@@ -62,7 +62,7 @@ pub struct LaconicOTRecv {
     qs: Vec<G1>,
     com: Com,
     bits: Vec<Choice>,
-    halo2params: Halo2Params,
+    pub halo2params: Halo2Params,
 }
 
 #[derive(Debug, Clone)]
