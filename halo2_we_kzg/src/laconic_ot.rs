@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use crate::{
+    kzg_commitment_with_halo2_proof,
     poly_op::{eval_polynomial, poly_divide, serialize_cubic_ext_field},
     Halo2Params,
 };
@@ -13,7 +14,7 @@ use halo2_proofs::{
     halo2curves::group::Curve,
     halo2curves::pairing::Engine,
     poly::{
-        commitment::{Blind, Params, ParamsProver},
+        commitment::{Blind, ParamsProver},
         EvaluationDomain,
     },
 };
@@ -63,6 +64,7 @@ pub struct LaconicOTRecv {
     com: Com,
     bits: Vec<Choice>,
     pub halo2params: Halo2Params,
+    pub proof: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -91,10 +93,13 @@ impl LaconicOTRecv {
         //     E::ScalarField::rand(&mut ark_std::test_rng())
         // });
 
+        let circuit_params = halo2params.params.clone();
+        let circuit_output =
+            kzg_commitment_with_halo2_proof(circuit_params, elems.clone()).unwrap();
+
         // Compute the commitment using `ParamsKZG`'s `commit_lagrange` function,
         // with default blinding factor and Plonk engine
         let engine = PlonkEngineConfig::build_default::<G1Affine>();
-        let alpha = Blind::default();
 
         let mut a = halo2params.domain.empty_lagrange();
         for (i, a) in a.iter_mut().enumerate() {
@@ -104,11 +109,6 @@ impl LaconicOTRecv {
                 *a = Fr::zero();
             }
         }
-
-        // compute commitment
-        let commitment = halo2params
-            .params
-            .commit_lagrange(&engine.msm_backend, &a, alpha);
 
         // Convert polynomial f from Lagrange to coefficient form.
         let poly_coeff = halo2params.domain.lagrange_to_coeff(a.clone());
@@ -133,6 +133,8 @@ impl LaconicOTRecv {
                     _marker: PhantomData::<Coeff>,
                 };
 
+                let alpha = Blind::default();
+
                 // Commit to the quotient polynomial (in coefficient form).
                 let point = halo2params
                     .params
@@ -143,9 +145,10 @@ impl LaconicOTRecv {
 
         Self {
             qs,
-            com: commitment.into(),
+            com: circuit_output.commitment.into(),
             bits: bits.to_vec(),
             halo2params,
+            proof: circuit_output.proof,
         }
     }
 

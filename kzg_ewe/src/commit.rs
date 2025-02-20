@@ -60,7 +60,7 @@ impl Trinity {
             }
             KZGType::Halo2 => {
                 // To Do: Have cleaner way to transpose message_length to degree for Halo2
-                let degree = message_length / 4;
+                let degree = message_length;
                 let halo2params =
                     Halo2Params::setup(rng, degree).expect("Failed to setup Halo2Params");
                 TrinityParams::Halo2(halo2params)

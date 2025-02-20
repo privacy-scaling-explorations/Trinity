@@ -23,7 +23,7 @@ use halo2_proofs::{
     },
 };
 
-#[derive(Debug)]
+#[derive()]
 pub struct CircuitOutput {
     pub commitment: G1Affine,
     pub proof: Vec<u8>,
