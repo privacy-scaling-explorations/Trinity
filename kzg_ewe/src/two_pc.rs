@@ -17,6 +17,18 @@ struct JobMatchingTestCase {
     expected_result: bool,
 }
 
+pub fn init() {
+    todo!()
+}
+
+pub fn garble() {
+    todo!()
+}
+
+pub fn evaluate() {
+    todo!()
+}
+
 async fn run_job_matching_test(test_case: JobMatchingTestCase) {
     let circ = Circuit::parse(
         "circuits/job_matching.txt",
