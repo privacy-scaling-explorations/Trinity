@@ -13,6 +13,16 @@ ark-ec = "0.4.0"
 ark-ff = "0.4.0"
 ark-bn254 = "0.4.0"
 ark-poly = "0.4.0"
+mpz-circuits = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "b8ae7ac" }
+mpz-common = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "b8ae7ac" }
+mpz-garble = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "b8ae7ac" }
+mpz-ot = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "b8ae7ac" }
+tokio = { version = "1.23", features = [
+    "net",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+]}
 
 [patch.crates-io]
 halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
