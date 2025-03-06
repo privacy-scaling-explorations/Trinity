@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use ark_bn254::{Bn254, Fr};
 use ark_poly::Radix2EvaluationDomain;
 // Assume these are from your separate crates:
@@ -9,6 +11,8 @@ use laconic_ot::{
     LaconicOTSender as PlainOTSender,
 };
 use rand::{rngs::OsRng, Rng};
+
+use crate::ot::{KZGOTReceiver, KZGOTSender};
 
 const MSG_SIZE: usize = 32;
 
@@ -38,8 +42,8 @@ pub enum TrinitySender<'a> {
 }
 
 pub struct Trinity {
-    mode: KZGType,
-    params: TrinityParams,
+    pub mode: KZGType,
+    pub params: TrinityParams,
 }
 
 pub enum TrinityMsg {
@@ -68,6 +72,46 @@ impl Trinity {
         };
 
         Self { mode, params }
+    }
+
+    pub fn create_ot_receiver<Ctx>(&self) -> KZGOTReceiver<Ctx> {
+        let trinity_receiver = match &self.params {
+            TrinityParams::Plain(ck) => {
+                let bits = Vec::new();
+                TrinityReceiver::Plain(PlainOTRecv::new(ck, &bits))
+            }
+            TrinityParams::Halo2(params) => {
+                let bits = Vec::new();
+                TrinityReceiver::Halo2(Halo2OTRecv::new(params.clone(), &bits))
+            }
+        };
+
+        KZGOTReceiver {
+            trinity_receiver: trinity_receiver,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn create_ot_sender<Ctx>(&self) -> KZGOTSender<Ctx> {
+        let trinity_sender = match &self.params {
+            TrinityParams::Plain(ck) => {
+                let com = PlainCom::<Bn254>::default();
+                TrinitySender::Plain(PlainOTSender::new(ck, com))
+            }
+            TrinityParams::Halo2(params) => {
+                let com = Halo2Com::default();
+                TrinitySender::Halo2(Halo2OTSender::new(
+                    params.clone().params,
+                    com,
+                    params.clone().domain,
+                ))
+            }
+        };
+
+        KZGOTSender {
+            trinity_sender: trinity_sender,
+            _phantom: PhantomData,
+        }
     }
 }
 
@@ -106,6 +150,13 @@ impl<'a> TrinityReceiver<'a> {
             TrinityReceiver::Halo2(recv) => TrinityCom::Halo2(recv.commitment()),
         }
     }
+
+    // pub fn params(&self) -> &TrinityParams {
+    //     match self {
+    //         TrinityReceiver::Plain(recv) => recv.params(),
+    //         TrinityReceiver::Halo2(recv) => recv.params(),
+    //     }
+    // }
 }
 
 impl<'a> TrinitySender<'a> {

@@ -9,6 +9,8 @@ edition = "2021"
 laconic-ot = { path = "../research_we_kzg" }
 halo2_we_kzg = { path = "../halo2_we_kzg" }
 rand = "0.8"
+rand_chacha = "0.3"
+rand_core = "0.6"
 ark-ec = "0.4.0"
 ark-ff = "0.4.0"
 ark-bn254 = "0.4.0"
@@ -16,6 +18,8 @@ ark-poly = "0.4.0"
 mpz-circuits = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "b8ae7ac" }
 mpz-common = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "b8ae7ac" }
 mpz-garble = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "b8ae7ac" }
+mpz-garble-core = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "b8ae7ac" }
+mpz-core = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "b8ae7ac" }
 mpz-ot = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "b8ae7ac" }
 tokio = { version = "1.23", features = [
     "net",
@@ -23,6 +27,8 @@ tokio = { version = "1.23", features = [
     "rt",
     "rt-multi-thread",
 ]}
+serio = "0.1" 
+async-trait = "0.1"
 
 [patch.crates-io]
 halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
