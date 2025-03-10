@@ -1,9 +1,4 @@
-use crate::commit::{KZGType, Trinity, TrinityMsg, TrinityReceiver, TrinitySender};
-use async_trait::async_trait;
-use mpz_ot::{
-    chou_orlandi::{Sender, SenderError},
-    OTError, OTReceiver, OTReceiverOutput, OTSender, OTSenderOutput, OTSetup, TransferId,
-};
+use crate::commit::{TrinityReceiver, TrinitySender};
 use std::marker::PhantomData;
 
 pub struct Block([u8; 16]);
