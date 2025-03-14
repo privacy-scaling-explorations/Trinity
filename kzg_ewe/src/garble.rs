@@ -1,195 +1,250 @@
+use itybity::IntoBitIterator;
 use mpz_circuits::{types::ValueType, Circuit};
+use mpz_core::Block;
 use mpz_garble_core::{
-    encoding_state::{Active, Full},
-    ChaChaEncoder, Delta, EncodedValue, Encoder, Evaluator, Generator,
+    Delta, EncryptedGate, Evaluator, EvaluatorOutput, Generator, GeneratorOutput, Key, Mac,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
-/// A generic garbled circuit structure.
-/// The circuit is parsed from a given file and the input/output types are provided.
-pub struct GarbledData<T> {
-    pub circuit: Circuit,
-    pub garbler_input_size: usize,
-    pub evaluator_input_size: usize,
-    /// For each evaluator input wire, a pair of possible labels.
-    pub input_labels: Vec<[EncodedValue<Full>; 2]>,
-    /// The garbler’s input labels.
-    pub garbler_input_labels: Vec<EncodedValue<Full>>,
-    /// Dummy evaluator encryption messages (normally provided via OT).
-    pub evaluator_input_label_encryption: Vec<T>,
-    /// The generator’s output labels.
-    pub output_labels: Vec<EncodedValue<Full>>,
-    /// A global value used in decoding (dummy here).
-    pub r: EncodedValue<Full>,
+pub struct GarbledData {}
+
+pub fn generate_garbling_generic() -> Result<GarbledData, Box<dyn std::error::Error>> {
+    Ok(GarbledData {})
 }
 
-/// Generates a garbled circuit from a given circuit file and input configuration.
-///
-/// - `circuit_path`: Path to the circuit file.
-/// - `input_types`: A slice with the types for *all* circuit inputs (garbler inputs come first).
-/// - `output_types`: A slice with the types for the circuit outputs.
-/// - `garbler_input_values`: A slice of raw input values (u64) for the garbler.
-/// - `evaluator_input_values`: A slice of raw input values (u64) for the evaluator.
-///
-/// For simplicity we assume all inputs can be encoded via `encode::<u8>` (note that the
-/// underlying encoder works on 64-bit values even if the circuit expects U8 values).
-pub fn generate_garbling_generic(
-    circuit_path: &str,
-    input_types: &[ValueType],
-    output_types: &[ValueType],
-    garbler_input_values: &[u8],
-    evaluator_input_values: &[u32],
-) -> Result<GarbledData<Vec<u8>>, Box<dyn std::error::Error>> {
-    // Parse the circuit from the provided path.
-    let circ = Circuit::parse(circuit_path, input_types, output_types)?;
-    let total_expected = garbler_input_values.len() + evaluator_input_values.len();
-    if total_expected != input_types.len() {
-        return Err(format!(
-            "Input count mismatch: provided {} inputs but circuit expects {}",
-            total_expected,
-            input_types.len()
-        )
-        .into());
-    }
-
-    // Setup RNG, delta, and create the encoder.
-    let mut rng = StdRng::seed_from_u64(0);
-    let delta = Delta::random(&mut rng);
-    let seed: [u8; 32] = rng.gen();
-    let encoder = ChaChaEncoder::new(seed);
-
-    // Encode inputs in the order expected by the circuit:
-    // first the garbler's inputs, then the evaluator's inputs.
-    let mut encoded_inputs = Vec::with_capacity(total_expected);
-    for &val in garbler_input_values {
-        let encoded: EncodedValue<Full> = encoder.encode::<u8>(val).into();
-        encoded_inputs.push(encoded);
-    }
-    for &val in evaluator_input_values {
-        let encoded: EncodedValue<Full> = encoder.encode::<u8>(val).into();
-        encoded_inputs.push(encoded);
-    }
-
-    // Create generator and generate the garbled circuit.
-    let mut gen = Generator::default();
-    let mut gen_iter = gen.generate(&circ, delta, encoded_inputs.clone())?;
-    let _ = gen_iter.by_ref().collect::<Vec<_>>();
-    let output_encodings = gen_iter.finish()?;
-    let outputs = output_encodings.outputs;
-    outputs
-        .iter()
-        .for_each(|x| println!("Generator output: {:?}", x));
-
-    // For a generic protocol you might need to build input labels differently.
-    // Here we assume:
-    // - Garbler input labels are the first N inputs.
-    // - For each evaluator input, we build a pair (for 0 and 1).
-    // In a real protocol these labels are provided by the generator.
-    let garbler_input_labels = encoded_inputs[0..garbler_input_values.len()].to_vec();
-    let mut evaluator_input_label_pairs = Vec::with_capacity(evaluator_input_values.len());
-    for i in 0..evaluator_input_values.len() {
-        // For simplicity, use the same encoded input for both 0 and 1.
-        // In practice these labels will be distinct.
-        let label = encoded_inputs[garbler_input_values.len() + i].clone();
-        evaluator_input_label_pairs.push([label.clone(), label]);
-    }
-
-    // Dummy evaluator encryption messages – one per evaluator input.
-    let evaluator_input_label_encryption = vec![vec![0u8; 16]; evaluator_input_values.len()];
-
-    // For testing, choose the first output as the decoding factor.
-    let r = outputs.get(0).cloned().ok_or("Missing output label")?;
-
-    Ok(GarbledData {
-        circuit: circ,
-        garbler_input_size: garbler_input_values.len(),
-        evaluator_input_size: evaluator_input_values.len(),
-        input_labels: evaluator_input_label_pairs,
-        garbler_input_labels,
-        evaluator_input_label_encryption,
-        output_labels: outputs,
-        r,
-    })
-}
-
-/// Evaluates the garbled circuit using active (selected) labels.
-///
-/// The caller supplies a slice of bits (one per evaluator input) which selects the
-/// active label from each label pair.
 pub fn evaluate_circuit_generic(
-    gd: &GarbledData<Vec<u8>>,
-    evaluator_bits: &[u8],
-) -> Result<Vec<EncodedValue<Active>>, Box<dyn std::error::Error>> {
-    // Build the input vector for evaluation:
-    // First, convert the garbler's full labels to active labels.
-    let mut inputs = Vec::with_capacity(gd.garbler_input_size + gd.evaluator_input_size);
-    for label in gd.garbler_input_labels.iter() {
-        // Here you may call `select` with the actual garbler input value.
-        // For simplicity we assume the garbler input value is 0.
-        inputs.push(label.select(0u8)?);
-    }
-    // For evaluator inputs, use the provided bits to select the active label.
-    if evaluator_bits.len() != gd.input_labels.len() {
-        return Err("Evaluator bits length does not match the number of evaluator inputs".into());
-    }
-    for (i, pair) in gd.input_labels.iter().enumerate() {
-        let bit = evaluator_bits[i];
-        inputs.push(pair[bit as usize].select(bit)?);
-    }
-
-    // Evaluate the circuit.
-    let mut evaluator = Evaluator::default();
-    let consumer = evaluator.evaluate(&gd.circuit, inputs)?;
-    // Once all encrypted gates have been processed, finish evaluation:
-    let output = consumer.finish()?.outputs;
-    Ok(output)
+    gd: &GarbledData,
+    evaluator_bits: Vec<u8>,
+) -> Result<EvaluatorOutput, Box<dyn std::error::Error>> {
+    Ok()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aes::{
+        cipher::{BlockEncrypt, KeyInit},
+        Aes128,
+    };
+    use itybity::{FromBitIterator, IntoBitIterator, ToBits};
     use mpz_circuits::types::ValueType;
+    use mpz_garble_core::{EvaluatorOutput, GeneratorOutput};
 
     #[test]
     fn test_generic_garble_and_evaluate() -> Result<(), Box<dyn std::error::Error>> {
-        // For this test, we assume a circuit file "circuits/demo.txt"
-        // that expects two inputs (first for garbler, second for evaluator)
-        // and produces one output.
         let circuit_path = "circuits/demo.txt";
-        let input_types = &[
-            ValueType::Array(Box::new(ValueType::U8), 64),
-            ValueType::Array(Box::new(ValueType::U32), 8),
-        ];
-        let output_types = &[ValueType::Array(Box::new(ValueType::U32), 8)];
+        let garbler_input_types = &ValueType::Array(Box::new(ValueType::U8), 1);
+        let evaluator_input_types = &ValueType::Array(Box::new(ValueType::U8), 1);
+        let output_types = &[ValueType::Array(Box::new(ValueType::U8), 1)];
 
-        // Provide some dummy input values.
-        let garbler_inputs = &[0u8; 64]; // One garbler input.
-        let evaluator_inputs = &[0u32; 8]; // One evaluator input.
+        // Provide garbler input values.
+        let garbler_inputs = [1u8; 1];
+        let evaluator_bits = [1u8; 1];
 
-        // Generate the garbled circuit.
-        let gd = generate_garbling_generic(
-            circuit_path,
-            input_types,
-            output_types,
-            garbler_inputs,
-            evaluator_inputs,
-        )?;
-        println!("Generated GarbledData: {:?}", gd.circuit);
+        // Generate the garbled circuit. Note that evaluator inputs are not consumed here.
+        let gd = generate_2pc()?;
 
-        // For evaluation, supply the evaluator’s selection bits (one bit per evaluator input).
-        let evaluator_bits = &[0u8]; // For instance, select label for 0.
-        let evaluator_output = evaluate_circuit_generic(&gd, evaluator_bits)?;
-        println!("Evaluator output: {:?}", evaluator_output);
+        let evaluator_output = evaluate_2pc()?;
 
-        // In a correct protocol, the evaluator’s active outputs should match
-        // the generator’s outputs (after both are converted to the active state).
-        let generator_active_outputs: Vec<EncodedValue<Active>> = gd
-            .output_labels
-            .into_iter()
-            .map(|full| full.select(0u8).unwrap())
+        let output: Vec<u8> = Vec::from_lsb0_iter(
+            evaluator_output
+                .into_iter()
+                .zip(gd.output_keys)
+                .map(|(mac, key)| mac.pointer() ^ key.pointer()),
+        );
+
+        println!("Output: {:?}", output);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_simple() {
+        let circuit_path = "circuits/demo.txt";
+        let garbler_input_types = &ValueType::Array(Box::new(ValueType::U8), 1);
+        let evaluator_input_types = &ValueType::Array(Box::new(ValueType::U8), 1);
+        let output_types = &[ValueType::Array(Box::new(ValueType::U8), 1)];
+
+        let input_types = &[garbler_input_types.clone(), evaluator_input_types.clone()];
+        let circ = Circuit::parse(circuit_path, input_types, output_types)
+            .unwrap()
+            .reverse_input(0)
+            .reverse_input(1)
+            .reverse_output(0);
+
+        let mut rng = StdRng::seed_from_u64(0);
+
+        let input_a = [1u8; 1];
+        let input_b = [1u8; 1];
+
+        let expected: [u8; 1] = [2u8; 1];
+
+        let delta = Delta::random(&mut rng);
+        let input_keys = (0..circ.input_len())
+            .map(|_| rng.gen())
+            .collect::<Vec<Key>>();
+
+        let input_macs = input_keys
+            .iter()
+            .zip(input_a.iter().copied().chain(input_b).into_iter_lsb0())
+            .map(|(key, bit)| key.auth(bit, &delta))
+            .collect::<Vec<_>>();
+
+        let mut gen = Generator::default();
+        let mut ev = Evaluator::default();
+
+        let mut gen_iter = gen.generate_batched(&circ, delta, input_keys).unwrap();
+        let mut ev_consumer = ev.evaluate_batched(&circ, input_macs).unwrap();
+
+        for batch in gen_iter.by_ref() {
+            ev_consumer.next(batch);
+        }
+
+        let GeneratorOutput {
+            outputs: output_keys,
+        } = gen_iter.finish().unwrap();
+        let EvaluatorOutput {
+            outputs: output_macs,
+        } = ev_consumer.finish().unwrap();
+
+        assert!(output_keys
+            .iter()
+            .zip(&output_macs)
+            .zip(expected.iter_lsb0())
+            .all(|((key, mac), bit)| &key.auth(bit, &delta) == mac));
+
+        let output: Vec<u8> = Vec::from_lsb0_iter(
+            output_macs
+                .into_iter()
+                .zip(output_keys)
+                .map(|(mac, key)| mac.pointer() ^ key.pointer()),
+        );
+
+        println!("Output: {:?}", output);
+
+        assert_eq!(output, expected);
+    }
+
+    fn u8_to_bits(value: u8) -> [bool; 8] {
+        [
+            value & 1 != 0,
+            value & 2 != 0,
+            value & 4 != 0,
+            value & 8 != 0,
+            value & 16 != 0,
+            value & 32 != 0,
+            value & 64 != 0,
+            value & 128 != 0,
+        ]
+    }
+
+    #[test]
+    fn test_2pc() {
+        let circuit_path = "circuits/demo.txt";
+        let garbler_input_types = &ValueType::Array(Box::new(ValueType::U8), 1);
+        let evaluator_input_types = &ValueType::Array(Box::new(ValueType::U8), 1);
+        let output_types = &[ValueType::Array(Box::new(ValueType::U8), 1)];
+
+        let input_types = &[garbler_input_types.clone(), evaluator_input_types.clone()];
+        let circ = Circuit::parse(circuit_path, input_types, output_types)
+            .unwrap()
+            .reverse_input(0)
+            .reverse_input(1)
+            .reverse_output(0);
+
+        let mut rng = StdRng::seed_from_u64(0);
+
+        // Define the inputs separately:
+        let garbler_input = [5u8; 1];
+        let evaluator_input = [7u8; 1];
+        let expected: [u8; 1] = [12u8; 1];
+
+        let delta = Delta::random(&mut rng);
+
+        // Decompose the u8 inputs into bits (each will produce 8 bits)
+        let garbler_bits: Vec<bool> = garbler_input
+            .iter()
+            .flat_map(|&byte| u8_to_bits(byte))
+            .collect();
+        let evaluator_bits: Vec<bool> = evaluator_input
+            .iter()
+            .flat_map(|&byte| u8_to_bits(byte))
             .collect();
 
-        assert_eq!(generator_active_outputs, evaluator_output);
-        Ok(())
+        // --- Garbler's input key generation (one key per bit) ---
+        let garbler_keys = (0..garbler_bits.len())
+            .map(|_| rng.gen())
+            .collect::<Vec<Key>>();
+
+        // --- Evaluator's input key generation (simulate OT for each bit) ---
+        let evaluator_key_pairs = (0..evaluator_bits.len())
+            .map(|_| (rng.gen::<Key>(), rng.gen::<Key>()))
+            .collect::<Vec<_>>();
+
+        // Evaluator selects the correct key based on his input bit:
+        let evaluator_keys: Vec<Key> = evaluator_key_pairs
+            .iter()
+            .zip(evaluator_bits.iter())
+            .map(
+                |(&(ref key0, ref key1), &bit)| {
+                    if bit {
+                        key1.clone()
+                    } else {
+                        key0.clone()
+                    }
+                },
+            )
+            .collect();
+
+        // --- Compute MACs for inputs ---
+        let garbler_macs = garbler_keys
+            .iter()
+            .zip(garbler_bits.iter())
+            .map(|(key, &bit)| key.auth(bit, &delta))
+            .collect::<Vec<_>>();
+
+        let evaluator_macs = evaluator_keys
+            .iter()
+            .zip(evaluator_bits.iter())
+            .map(|(key, &bit)| key.auth(bit, &delta))
+            .collect::<Vec<_>>();
+
+        // --- Combine inputs for garbling and evaluation ---
+        // The circuit expects keys for every bit.
+        let mut input_keys = vec![];
+        input_keys.extend(garbler_keys.clone());
+        input_keys.extend(evaluator_keys.clone());
+
+        let mut input_macs = vec![];
+        input_macs.extend(garbler_macs);
+        input_macs.extend(evaluator_macs);
+
+        let mut gen = Generator::default();
+        let mut ev = Evaluator::default();
+
+        let mut gen_iter = gen.generate_batched(&circ, delta, input_keys).unwrap();
+        let mut ev_consumer = ev.evaluate_batched(&circ, input_macs).unwrap();
+
+        for batch in gen_iter.by_ref() {
+            ev_consumer.next(batch);
+        }
+
+        let GeneratorOutput {
+            outputs: output_keys,
+        } = gen_iter.finish().unwrap();
+        let EvaluatorOutput {
+            outputs: output_macs,
+        } = ev_consumer.finish().unwrap();
+
+        // Simulate output recovery by XOR-ing pointer values:
+        let output: Vec<u8> = Vec::from_lsb0_iter(
+            output_macs
+                .into_iter()
+                .zip(output_keys)
+                .map(|(mac, key)| mac.pointer() ^ key.pointer()),
+        );
+
+        println!("Output: {:?}", output);
+        assert_eq!(output, expected);
     }
 }
