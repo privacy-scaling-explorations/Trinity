@@ -30,6 +30,7 @@ tokio = { version = "1.23", features = [
 serio = "0.1" 
 async-trait = "0.1"
 itybity = "0.2"
+lazy_static = "1.5.0"
 
 [patch.crates-io]
 halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
