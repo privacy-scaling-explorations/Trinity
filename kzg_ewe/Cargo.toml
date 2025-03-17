@@ -15,22 +15,9 @@ ark-ec = "0.4.0"
 ark-ff = "0.4.0"
 ark-bn254 = "0.4.0"
 ark-poly = "0.4.0"
-mpz-circuits = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "7ace0ad" }
-mpz-common = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "7ace0ad" }
-mpz-garble = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "7ace0ad" }
-mpz-garble-core = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "7ace0ad" }
-mpz-core = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "7ace0ad" }
-mpz-ot = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "7ace0ad" }
-tokio = { version = "1.23", features = [
-    "net",
-    "macros",
-    "rt",
-    "rt-multi-thread",
-]}
-serio = "0.1" 
-async-trait = "0.1"
-itybity = "0.2"
-lazy_static = "1.5.0"
+fancy-garbling = { path = "../../swanky/fancy-garbling" }
+scuttlebutt = { path = "../../swanky/scuttlebutt" }
+ocelot = { path = "../../swanky/ocelot" }
 
 [patch.crates-io]
 halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
