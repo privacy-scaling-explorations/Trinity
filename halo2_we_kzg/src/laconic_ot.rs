@@ -18,10 +18,11 @@ use halo2_proofs::{
         EvaluationDomain,
     },
 };
-use halo2curves::bn256::Gt;
+use halo2curves::{bn256::Gt, serde::SerdeObject};
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 
-const MSG_SIZE: usize = 32;
+const MSG_SIZE: usize = 16;
 
 fn fq12_to_bytes(gt: Gt) -> Vec<u8> {
     // Here we assume gt.get_base() returns an Fq12‑like type that has methods c0() and c1(),
@@ -38,7 +39,40 @@ fn fq12_to_bytes(gt: Gt) -> Vec<u8> {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Msg {
-    h: [(G2Affine, [u8; MSG_SIZE]); 2],
+    pub h: [(G2Affine, [u8; MSG_SIZE]); 2],
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SerializableMsg {
+    pub h: [(Vec<u8>, [u8; MSG_SIZE]); 2],
+}
+
+impl Msg {
+    pub fn serialize(&self) -> Vec<u8> {
+        let serializable = SerializableMsg {
+            h: self.h.map(|(g2, msg)| {
+                let g2_bytes = g2.to_raw_bytes(); // Vec<u8> with length 128
+                (g2_bytes, msg)
+            }),
+        };
+        serde_json::to_vec(&serializable).unwrap()
+    }
+
+    pub fn deserialize(data: &[u8]) -> Self {
+        let serializable: SerializableMsg = serde_json::from_slice(data).unwrap();
+        let h = serializable.h.map(|(g2_bytes, msg)| {
+            assert_eq!(g2_bytes.len(), 128, "Invalid length for G2Affine");
+            let g2 = G2Affine::from_raw_bytes(&g2_bytes).expect("Deserialization failed");
+            (g2, msg)
+        });
+        Self { h }
+    }
+}
+
+impl AsMut<[u8]> for Msg {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.h[0].1
+    }
 }
 
 pub type Com = G1;
@@ -281,3 +315,26 @@ fn test_laconic_ot() {
 //     }
 //     println!("{:?}", ot_recv);
 // }
+
+#[test]
+fn test_msg_halo2_serialization() {
+    use halo2_proofs::halo2curves::bn256::G2Affine;
+    use rand::rngs::OsRng;
+
+    let rng = &mut OsRng;
+
+    let original_msg = Msg {
+        h: [
+            (G2Affine::random(rng.clone()), [3u8; MSG_SIZE]),
+            (G2Affine::random(rng), [4u8; MSG_SIZE]),
+        ],
+    };
+
+    let serialized = original_msg.serialize();
+    let deserialized_msg = Msg::deserialize(&serialized);
+
+    assert_eq!(original_msg.h[0].1, deserialized_msg.h[0].1);
+    assert_eq!(original_msg.h[1].1, deserialized_msg.h[1].1);
+    assert_eq!(original_msg.h[0].0, deserialized_msg.h[0].0);
+    assert_eq!(original_msg.h[1].0, deserialized_msg.h[1].0);
+}

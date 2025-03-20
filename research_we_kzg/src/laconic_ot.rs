@@ -3,13 +3,15 @@ use crate::{kzg_fk_open::all_openings_single, kzg_types::CommitmentKey};
 
 use ark_ec::pairing::Pairing;
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
+use ark_serialize::CanonicalDeserialize;
 use ark_serialize::CanonicalSerialize;
 use ark_std::One;
 use ark_std::UniformRand;
 use ark_std::Zero;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 
-const MSG_SIZE: usize = 32;
+const MSG_SIZE: usize = 16;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Choice {
@@ -17,6 +19,28 @@ pub enum Choice {
     One,
 }
 
+impl<E: Pairing> Msg<E> {
+    pub fn serialize(&self) -> Vec<u8> {
+        let serializable = SerializableMsg {
+            h: self.h.map(|(g2, msg)| {
+                let mut g2_bytes = Vec::new();
+                g2.serialize_compressed(&mut g2_bytes).unwrap();
+                (g2_bytes, msg)
+            }),
+        };
+        serde_json::to_vec(&serializable).unwrap()
+    }
+
+    pub fn deserialize(data: &[u8]) -> Self {
+        let serializable: SerializableMsg = serde_json::from_slice(data).unwrap();
+        let h = serializable.h.map(|(g2_bytes, msg)| {
+            let g2 = E::G2Affine::deserialize_compressed(&*g2_bytes)
+                .expect("Failed to deserialize G2Affine");
+            (g2, msg)
+        });
+        Self { h }
+    }
+}
 pub type Com<E: Pairing> = E::G1;
 
 impl Choice {
@@ -32,7 +56,18 @@ impl Choice {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Msg<E: Pairing> {
-    h: [(E::G2Affine, [u8; MSG_SIZE]); 2],
+    pub h: [(E::G2Affine, [u8; MSG_SIZE]); 2],
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SerializableMsg {
+    pub h: [(Vec<u8>, [u8; MSG_SIZE]); 2],
+}
+
+impl<E: Pairing> AsMut<[u8]> for Msg<E> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.h[0].1
+    }
 }
 
 pub struct LaconicOT<E: Pairing, D: EvaluationDomain<E::ScalarField>> {
@@ -178,4 +213,31 @@ fn test_laconic_ot() {
     let msg = receiver.send(rng, 0, m0, m1);
     let res = sender.recv(0, msg);
     assert_eq!(res, m0);
+}
+
+#[test]
+fn test_msg_serialization() {
+    use ark_bls12_381::{Bls12_381, Fr, G2Affine};
+    use rand::rngs::OsRng;
+
+    // Create dummy Msg
+    let rng = &mut OsRng;
+    let h = [
+        (G2Affine::rand(rng), [1u8; MSG_SIZE]),
+        (G2Affine::rand(rng), [2u8; MSG_SIZE]),
+    ];
+
+    let original_msg = Msg::<Bls12_381> { h };
+
+    // Serialize
+    let serialized = original_msg.serialize();
+
+    // Deserialize
+    let deserialized_msg = Msg::<Bls12_381>::deserialize(&serialized);
+
+    // Verify equality
+    assert_eq!(original_msg.h[0].1, deserialized_msg.h[0].1);
+    assert_eq!(original_msg.h[1].1, deserialized_msg.h[1].1);
+    assert_eq!(original_msg.h[0].0, deserialized_msg.h[0].0);
+    assert_eq!(original_msg.h[1].0, deserialized_msg.h[1].0);
 }

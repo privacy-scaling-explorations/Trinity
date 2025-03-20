@@ -2,28 +2,63 @@ use std::marker::PhantomData;
 
 use ark_bn254::{Bn254, Fr};
 use ark_poly::Radix2EvaluationDomain;
+use std::sync::Arc;
 // Assume these are from your separate crates:
 use halo2_we_kzg::{
     Com as Halo2Com, Halo2Params, LaconicOTRecv as Halo2OTRecv, LaconicOTSender as Halo2OTSender,
 };
 use laconic_ot::{
-    Choice, Com as PlainCom, CommitmentKey, LaconicOTRecv as PlainOTRecv,
-    LaconicOTSender as PlainOTSender,
+    Com as PlainCom, CommitmentKey, LaconicOTRecv as PlainOTRecv, LaconicOTSender as PlainOTSender,
 };
 use rand::{rngs::OsRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use crate::ot::{KZGOTReceiver, KZGOTSender};
 
-const MSG_SIZE: usize = 32;
+const MSG_SIZE: usize = 16;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrinityChoice {
+    Zero,
+    One,
+}
+
+impl From<laconic_ot::Choice> for TrinityChoice {
+    fn from(ch: laconic_ot::Choice) -> Self {
+        match ch {
+            laconic_ot::Choice::Zero => TrinityChoice::Zero,
+            laconic_ot::Choice::One => TrinityChoice::One,
+        }
+    }
+}
+
+impl From<TrinityChoice> for laconic_ot::Choice {
+    fn from(ch: TrinityChoice) -> Self {
+        match ch {
+            TrinityChoice::Zero => laconic_ot::Choice::Zero,
+            TrinityChoice::One => laconic_ot::Choice::One,
+        }
+    }
+}
+
+impl From<TrinityChoice> for halo2_we_kzg::Choice {
+    fn from(ch: TrinityChoice) -> Self {
+        match ch {
+            TrinityChoice::Zero => halo2_we_kzg::Choice::Zero,
+            TrinityChoice::One => halo2_we_kzg::Choice::One,
+        }
+    }
+}
 
 pub enum KZGType {
     Plain,
     Halo2,
 }
 
+#[derive(Clone)]
 pub enum TrinityParams {
-    Plain(CommitmentKey<Bn254, Radix2EvaluationDomain<Fr>>),
-    Halo2(Halo2Params),
+    Plain(Arc<CommitmentKey<Bn254, Radix2EvaluationDomain<Fr>>>),
+    Halo2(Arc<Halo2Params>),
 }
 
 pub enum TrinityCom {
@@ -46,9 +81,53 @@ pub struct Trinity {
     pub params: TrinityParams,
 }
 
+#[derive(Clone, Copy, Debug)]
 pub enum TrinityMsg {
     Plain(laconic_ot::Msg<Bn254>),
     Halo2(halo2_we_kzg::Msg),
+}
+
+impl TrinityMsg {
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+
+        match self {
+            TrinityMsg::Plain(msg) => {
+                out.push(0); // variant tag for Plain
+                let msg_bytes = msg.serialize();
+                out.extend((msg_bytes.len() as u64).to_le_bytes()); // Store length
+                out.extend(msg_bytes);
+            }
+            TrinityMsg::Halo2(msg) => {
+                out.push(1); // variant tag for Halo2
+                let msg_bytes = msg.serialize();
+                out.extend((msg_bytes.len() as u64).to_le_bytes()); // Store length
+                out.extend(msg_bytes);
+            }
+        }
+        out
+    }
+
+    pub fn deserialize(bytes: &[u8]) -> Self {
+        if bytes.is_empty() {
+            panic!("Invalid serialized data");
+        }
+
+        let variant = bytes[0]; // Read the variant tag
+        let len = u64::from_le_bytes(bytes[1..9].try_into().unwrap()) as usize; // Read length
+
+        match variant {
+            0 => {
+                let msg = laconic_ot::Msg::<Bn254>::deserialize(&bytes[9..9 + len]);
+                TrinityMsg::Plain(msg)
+            }
+            1 => {
+                let msg = halo2_we_kzg::Msg::deserialize(&bytes[9..9 + len]);
+                TrinityMsg::Halo2(msg)
+            }
+            _ => panic!("Unknown variant tag"),
+        }
+    }
 }
 
 impl Trinity {
@@ -59,78 +138,52 @@ impl Trinity {
             KZGType::Plain => {
                 let plainparams =
                     CommitmentKey::<Bn254, Radix2EvaluationDomain<Fr>>::setup(rng, message_length)
-                        .expect("Failed to setup plain CommitmentKey");
-                TrinityParams::Plain(plainparams)
+                        .expect("setup failed");
+                TrinityParams::Plain(Arc::new(plainparams))
             }
             KZGType::Halo2 => {
                 // To Do: Have cleaner way to transpose message_length to degree for Halo2
                 let degree = message_length;
                 let halo2params =
                     Halo2Params::setup(rng, degree).expect("Failed to setup Halo2Params");
-                TrinityParams::Halo2(halo2params)
+                TrinityParams::Halo2(Arc::new(halo2params))
             }
         };
 
         Self { mode, params }
     }
 
-    pub fn create_ot_receiver<Ctx>(&self) -> KZGOTReceiver<Ctx> {
-        let trinity_receiver = match &self.params {
-            TrinityParams::Plain(ck) => {
-                let bits = Vec::new();
-                TrinityReceiver::Plain(PlainOTRecv::new(ck, &bits))
-            }
-            TrinityParams::Halo2(params) => {
-                let bits = Vec::new();
-                TrinityReceiver::Halo2(Halo2OTRecv::new(params.clone(), &bits))
-            }
-        };
-
+    pub fn create_ot_receiver<'a, Ctx>(&'a self, bits: &[TrinityChoice]) -> KZGOTReceiver<'a, Ctx> {
+        let trinity_receiver = TrinityReceiver::new(&self.params, bits);
         KZGOTReceiver {
-            trinity_receiver: trinity_receiver,
+            trinity_receiver,
             _phantom: PhantomData,
         }
     }
 
-    pub fn create_ot_sender<Ctx>(&self) -> KZGOTSender<Ctx> {
-        let trinity_sender = match &self.params {
-            TrinityParams::Plain(ck) => {
-                let com = PlainCom::<Bn254>::default();
-                TrinitySender::Plain(PlainOTSender::new(ck, com))
-            }
-            TrinityParams::Halo2(params) => {
-                let com = Halo2Com::default();
-                TrinitySender::Halo2(Halo2OTSender::new(
-                    params.clone().params,
-                    com,
-                    params.clone().domain,
-                ))
-            }
-        };
-
+    pub fn create_ot_sender<'a, Ctx>(&'a self, com: TrinityCom) -> KZGOTSender<'a, Ctx> {
+        let trinity_sender = TrinitySender::new(&self.params, com);
         KZGOTSender {
-            trinity_sender: trinity_sender,
+            trinity_sender,
             _phantom: PhantomData,
         }
     }
 }
 
 impl<'a> TrinityReceiver<'a> {
-    pub fn new(params: &'a TrinityParams, bits: &[Choice]) -> Self {
+    pub fn new(params: &'a TrinityParams, bits: &[TrinityChoice]) -> Self {
         match params {
-            TrinityParams::Plain(ck) => {
-                let plain_recv = PlainOTRecv::new(ck, bits);
+            TrinityParams::Plain(ck_arc) => {
+                let plain_bits: Vec<laconic_ot::Choice> = bits.iter().map(|&b| b.into()).collect();
+                let plain_recv = PlainOTRecv::new(ck_arc.as_ref(), &plain_bits);
                 TrinityReceiver::Plain(plain_recv)
             }
-            TrinityParams::Halo2(halo2_params) => {
+            TrinityParams::Halo2(halo2_params_arc) => {
                 let halo2_bits: Vec<halo2_we_kzg::Choice> = bits
                     .iter()
-                    .map(|b| match b {
-                        laconic_ot::Choice::Zero => halo2_we_kzg::Choice::Zero,
-                        laconic_ot::Choice::One => halo2_we_kzg::Choice::One,
-                    })
+                    .map(|&b| TrinityChoice::from(b).into())
                     .collect();
-                let halo2_recv = Halo2OTRecv::new(halo2_params.clone(), &halo2_bits);
+                let halo2_recv = Halo2OTRecv::new((halo2_params_arc.as_ref()).clone(), &halo2_bits);
                 TrinityReceiver::Halo2(halo2_recv)
             }
         }
@@ -160,14 +213,18 @@ impl<'a> TrinityReceiver<'a> {
 }
 
 impl<'a> TrinitySender<'a> {
-    pub fn sender_new(params: &'a TrinityParams, com: TrinityCom) -> Self {
+    pub fn new(params: &'a TrinityParams, com: TrinityCom) -> Self {
         match (params, com) {
             (TrinityParams::Plain(ck), TrinityCom::Plain(com)) => {
-                TrinitySender::Plain(PlainOTSender::new(ck, com))
+                TrinitySender::Plain(PlainOTSender::new(ck.as_ref(), com))
             }
-            (TrinityParams::Halo2(params), TrinityCom::Halo2(com)) => TrinitySender::Halo2(
-                Halo2OTSender::new(params.clone().params, com, params.clone().domain),
-            ),
+            (TrinityParams::Halo2(params_arc), TrinityCom::Halo2(com)) => {
+                TrinitySender::Halo2(Halo2OTSender::new(
+                    params_arc.as_ref().clone().params,
+                    com,
+                    params_arc.as_ref().clone().domain,
+                ))
+            }
             _ => panic!("Mismatched commitment type"),
         }
     }
@@ -196,21 +253,25 @@ mod tests {
         let rng = &mut OsRng;
         let message_length = 4;
 
-        // Setup Trinity with Plain mode
         let trinity = Trinity::setup(KZGType::Plain, message_length);
 
-        // Create receiver with bits
-        let bits = vec![Choice::Zero, Choice::One, Choice::Zero, Choice::One];
-        let receiver = TrinityReceiver::new(&trinity.params, &bits);
+        let bits = vec![
+            TrinityChoice::Zero,
+            TrinityChoice::One,
+            TrinityChoice::Zero,
+            TrinityChoice::One,
+        ];
 
-        // Create sender
-        let sender = TrinitySender::sender_new(&trinity.params, receiver.commitment());
+        // Trinity remains alive through receiver/sender
+        let ot_receiver = trinity.create_ot_receiver::<()>(&bits);
+        let commitment = ot_receiver.trinity_receiver.commitment();
+        let ot_sender = trinity.create_ot_sender::<()>(commitment);
 
-        // Test sending and receiving
         let m0 = [0u8; MSG_SIZE];
         let m1 = [1u8; MSG_SIZE];
-        let msg = sender.send(rng, 0, m0, m1);
-        let res = receiver.recv(0, msg);
+
+        let msg = ot_sender.trinity_sender.send(rng, 0, m0, m1);
+        let res = ot_receiver.trinity_receiver.recv(0, msg);
         assert_eq!(res, m0);
     }
 
@@ -219,21 +280,25 @@ mod tests {
         let rng = &mut OsRng;
         let message_length = 4;
 
-        // Setup Trinity with Halo2 mode
         let trinity = Trinity::setup(KZGType::Halo2, message_length);
 
-        // Create receiver with bits
-        let bits = vec![Choice::Zero, Choice::One, Choice::Zero, Choice::One];
-        let receiver = TrinityReceiver::new(&trinity.params, &bits);
+        let bits = vec![
+            TrinityChoice::Zero,
+            TrinityChoice::One,
+            TrinityChoice::Zero,
+            TrinityChoice::One,
+        ];
 
-        // Create sender
-        let sender = TrinitySender::sender_new(&trinity.params, receiver.commitment());
+        // Trinity remains alive through receiver/sender
+        let ot_receiver = trinity.create_ot_receiver::<()>(&bits);
+        let commitment = ot_receiver.trinity_receiver.commitment();
+        let ot_sender = trinity.create_ot_sender::<()>(commitment);
 
-        // Test sending and receiving
         let m0 = [0u8; MSG_SIZE];
         let m1 = [1u8; MSG_SIZE];
-        let msg = sender.send(rng, 0, m0, m1);
-        let res = receiver.recv(0, msg);
+
+        let msg = ot_sender.trinity_sender.send(rng, 0, m0, m1);
+        let res = ot_receiver.trinity_receiver.recv(0, msg);
         assert_eq!(res, m0);
     }
 }
