@@ -19,7 +19,6 @@ pub fn parse_circuit(fname: &str) -> Circuit {
     Circuit::parse(BufReader::new(File::open(fname).unwrap())).unwrap()
 }
 
-/// Converts a Vec<bool> to Vec<u16> where false -> 0 and true -> 1.
 pub fn bools_to_u16(bits: Vec<bool>) -> Vec<u16> {
     bits.into_iter().map(|b| if b { 1 } else { 0 }).collect()
 }
