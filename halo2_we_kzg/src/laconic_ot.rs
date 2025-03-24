@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 const MSG_SIZE: usize = 16;
 
 fn fq12_to_bytes(gt: Gt) -> Vec<u8> {
-    // Here we assume gt.get_base() returns an Fq12‑like type that has methods c0() and c1(),
+    // Here gt.get_base() returns an Fq12‑like type that has methods c0() and c1(),
     // each of which returns a CubicExtField.
     let base: QuadExtField<CubicExtField<QuadExtField<Fq>>> = gt.get_base();
 
@@ -297,24 +297,6 @@ fn test_laconic_ot() {
     let res = receiver.recv(0, msg);
     assert_eq!(res, m0);
 }
-
-// fn main() {
-//     let bits = vec![Choice::One, Choice::Zero, Choice::One, Choice::Zero];
-//     let k = 4;
-//     let ot_recv = LaconicOTRecv::new(&bits, k);
-//     for i in 0..3 {
-//         ot_recv.recv(
-//             i,
-//             Msg {
-//                 h: [
-//                     (G2Affine::random(OsRng), [0; MSG_SIZE]),
-//                     (G2Affine::random(OsRng), [0; MSG_SIZE]),
-//                 ],
-//             },
-//         );
-//     }
-//     println!("{:?}", ot_recv);
-// }
 
 #[test]
 fn test_msg_halo2_serialization() {

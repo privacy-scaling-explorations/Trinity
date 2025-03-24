@@ -11,7 +11,6 @@ use laconic_ot::{
     Com as PlainCom, CommitmentKey, LaconicOTRecv as PlainOTRecv, LaconicOTSender as PlainOTSender,
 };
 use rand::{rngs::OsRng, Rng};
-use serde::{Deserialize, Serialize};
 
 use crate::ot::{KZGOTReceiver, KZGOTSender};
 
@@ -203,13 +202,6 @@ impl<'a> TrinityReceiver<'a> {
             TrinityReceiver::Halo2(recv) => TrinityCom::Halo2(recv.commitment()),
         }
     }
-
-    // pub fn params(&self) -> &TrinityParams {
-    //     match self {
-    //         TrinityReceiver::Plain(recv) => recv.params(),
-    //         TrinityReceiver::Halo2(recv) => recv.params(),
-    //     }
-    // }
 }
 
 impl<'a> TrinitySender<'a> {
