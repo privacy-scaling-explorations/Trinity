@@ -10,10 +10,8 @@ use crate::{
 
 const MSG_SIZE: usize = 16;
 
-pub fn one() -> Vec<bool> {
-    let mut bits = vec![false; 16];
-    bits[0] = true; // least-significant bit = 1
-    bits
+pub fn int_to_bits(n: u16) -> Vec<bool> {
+    (0..16).map(|i| (n >> i) & 1 == 1).collect()
 }
 
 pub fn parse_circuit(fname: &str) -> Circuit {
@@ -110,27 +108,68 @@ mod tests {
         commit::KZGType,
         evaluate::evaluate_circuit,
         garble::generate_garbled_circuit,
-        two_pc::{ev_commit, one, parse_circuit, setup},
+        two_pc::{ev_commit, int_to_bits, parse_circuit, setup},
     };
 
+    pub fn bool_array_to_u16(arr: &[bool]) -> Vec<u16> {
+        arr.iter().map(|&b| if b { 1 } else { 0 }).collect()
+    }
+
     #[test]
-    fn two_pc_e2e() {
+    fn two_pc_e2e_plain() {
         let circ = parse_circuit("circuits/simple_add.txt");
         let setup_bundle = setup(KZGType::Plain);
 
-        let evaluator_commitment = ev_commit(one(), &setup_bundle).unwrap();
+        let garbler_input = int_to_bits(2);
+        let evaluator_input = int_to_bits(3);
+        let expected_result_bool = int_to_bits(5);
+
+        let expected_result: Vec<u16> = bool_array_to_u16(&expected_result_bool);
+
+        let evaluator_commitment = ev_commit(evaluator_input, &setup_bundle).unwrap();
 
         let (en, ev) = garble::<WireMod2, BinaryCircuit>(&circ).unwrap();
 
         let garbled = generate_garbled_circuit(
-            one(),
+            garbler_input,
             en,
             &setup_bundle,
             evaluator_commitment.receiver_commitment,
         );
 
-        let result = evaluate_circuit(circ, ev, garbled, evaluator_commitment.ot_receiver);
+        let result = evaluate_circuit(circ, ev, garbled, evaluator_commitment.ot_receiver).unwrap();
 
         println!("✅ Result: {:?}", result);
+
+        assert!(result == expected_result);
+    }
+
+    #[test]
+    fn two_pc_e2e_halo2() {
+        let circ = parse_circuit("circuits/simple_add.txt");
+        let setup_bundle = setup(KZGType::Halo2);
+
+        let garbler_input = int_to_bits(2);
+        let evaluator_input = int_to_bits(3);
+        let expected_result_bool = int_to_bits(5);
+
+        let expected_result: Vec<u16> = bool_array_to_u16(&expected_result_bool);
+
+        let evaluator_commitment = ev_commit(evaluator_input, &setup_bundle).unwrap();
+
+        let (en, ev) = garble::<WireMod2, BinaryCircuit>(&circ).unwrap();
+
+        let garbled = generate_garbled_circuit(
+            garbler_input,
+            en,
+            &setup_bundle,
+            evaluator_commitment.receiver_commitment,
+        );
+
+        let result = evaluate_circuit(circ, ev, garbled, evaluator_commitment.ot_receiver).unwrap();
+
+        println!("✅ Result: {:?}", result);
+
+        assert!(result == expected_result);
     }
 }
