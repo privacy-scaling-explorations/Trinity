@@ -4,8 +4,40 @@ use fancy_garbling::{
 use scuttlebutt::{serialization::CanonicalSerialize, Block};
 use std::io::Error;
 
+use crate::commit::{TrinityChoice, TrinityCom};
 use crate::garble::GarbledBundle;
 use crate::ot::KZGOTReceiver;
+use crate::SetupParams;
+
+pub struct EvaluatorBundle<'a> {
+    pub ot_receiver: KZGOTReceiver<'a, ()>,
+    pub receiver_commitment: TrinityCom,
+}
+
+pub fn ev_commit(
+    ev_inputs: Vec<bool>,
+    setup_params: &SetupParams,
+) -> Result<EvaluatorBundle, Error> {
+    let ev_trinity: Vec<TrinityChoice> = ev_inputs
+        .iter()
+        .map(|&b| {
+            if b {
+                TrinityChoice::One
+            } else {
+                TrinityChoice::Zero
+            }
+        })
+        .collect();
+
+    // === Evaluator: prepare OT receiver and commitment ===
+    let ot_receiver = setup_params.trinity.create_ot_receiver::<()>(&ev_trinity);
+    let receiver_commitment = ot_receiver.trinity_receiver.commitment();
+
+    Ok(EvaluatorBundle {
+        ot_receiver,
+        receiver_commitment,
+    })
+}
 
 pub fn evaluate_circuit(
     circuit: Circuit,

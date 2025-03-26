@@ -2,8 +2,6 @@ use std::marker::PhantomData;
 
 use ark_bn254::{Bn254, Fr};
 use ark_poly::Radix2EvaluationDomain;
-use std::sync::Arc;
-// Assume these are from your separate crates:
 use halo2_we_kzg::{
     Com as Halo2Com, Halo2Params, LaconicOTRecv as Halo2OTRecv, LaconicOTSender as Halo2OTSender,
 };
@@ -11,6 +9,8 @@ use laconic_ot::{
     Com as PlainCom, CommitmentKey, LaconicOTRecv as PlainOTRecv, LaconicOTSender as PlainOTSender,
 };
 use rand::{rngs::OsRng, Rng};
+
+use std::sync::Arc;
 
 use crate::ot::{KZGOTReceiver, KZGOTSender};
 
@@ -60,6 +60,7 @@ pub enum TrinityParams {
     Halo2(Arc<Halo2Params>),
 }
 
+#[derive(Clone, Copy)]
 pub enum TrinityCom {
     Plain(PlainCom<Bn254>),
     Halo2(Halo2Com),
@@ -80,7 +81,7 @@ pub struct Trinity {
     pub params: TrinityParams,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub enum TrinityMsg {
     Plain(laconic_ot::Msg<Bn254>),
     Halo2(halo2_we_kzg::Msg),
@@ -152,7 +153,7 @@ impl Trinity {
         Self { mode, params }
     }
 
-    pub fn create_ot_receiver<'a, Ctx>(&'a self, bits: &[TrinityChoice]) -> KZGOTReceiver<'a, Ctx> {
+    pub fn create_ot_receiver<Ctx>(&self, bits: &[TrinityChoice]) -> KZGOTReceiver<Ctx> {
         let trinity_receiver = TrinityReceiver::new(&self.params, bits);
         KZGOTReceiver {
             trinity_receiver,

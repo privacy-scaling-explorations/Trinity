@@ -1,12 +1,9 @@
 use fancy_garbling::circuit::BinaryCircuit as Circuit;
+use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
-use std::{fs::File, io::Error};
 
-use crate::{
-    commit::{KZGType, Trinity, TrinityChoice, TrinityCom, TrinityMsg},
-    ot::KZGOTReceiver,
-};
+use crate::commit::{KZGType, Trinity, TrinityMsg};
 
 const MSG_SIZE: usize = 16;
 
@@ -17,10 +14,6 @@ pub fn int_to_bits(n: u16) -> Vec<bool> {
 pub fn parse_circuit(fname: &str) -> Circuit {
     println!("* Circuit: {}", fname);
     Circuit::parse(BufReader::new(File::open(fname).unwrap())).unwrap()
-}
-
-pub fn bools_to_u16(bits: Vec<bool>) -> Vec<u16> {
-    bits.into_iter().map(|b| if b { 1 } else { 0 }).collect()
 }
 
 #[allow(dead_code)]
@@ -59,6 +52,7 @@ fn deserialize_ciphertexts(data: &[u8]) -> Vec<TrinityMsg> {
     ciphertexts
 }
 
+#[derive(Clone)]
 pub struct SetupParams {
     pub trinity: Arc<Trinity>,
 }
@@ -69,45 +63,15 @@ pub fn setup(mode: KZGType) -> SetupParams {
     SetupParams { trinity }
 }
 
-pub struct EvaluatorBundle<'a> {
-    pub ot_receiver: KZGOTReceiver<'a, ()>,
-    pub receiver_commitment: TrinityCom,
-}
-
-pub fn ev_commit(
-    ev_inputs: Vec<bool>,
-    setup_params: &SetupParams,
-) -> Result<EvaluatorBundle, Error> {
-    let ev_trinity: Vec<TrinityChoice> = ev_inputs
-        .iter()
-        .map(|&b| {
-            if b {
-                TrinityChoice::One
-            } else {
-                TrinityChoice::Zero
-            }
-        })
-        .collect();
-
-    // === Evaluator: prepare OT receiver and commitment ===
-    let ot_receiver = setup_params.trinity.create_ot_receiver::<()>(&ev_trinity);
-    let receiver_commitment = ot_receiver.trinity_receiver.commitment();
-
-    Ok(EvaluatorBundle {
-        ot_receiver,
-        receiver_commitment,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use fancy_garbling::{circuit::BinaryCircuit, classic::garble, WireMod2};
 
     use crate::{
         commit::KZGType,
-        evaluate::evaluate_circuit,
+        evaluate::{ev_commit, evaluate_circuit},
         garble::generate_garbled_circuit,
-        two_pc::{ev_commit, int_to_bits, parse_circuit, setup},
+        two_pc::{int_to_bits, parse_circuit, setup},
     };
 
     pub fn bool_array_to_u16(arr: &[bool]) -> Vec<u16> {

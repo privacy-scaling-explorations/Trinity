@@ -74,6 +74,7 @@ pub struct LaconicOT<E: Pairing, D: EvaluationDomain<E::ScalarField>> {
     ck: CommitmentKey<E, D>,
 }
 
+#[derive(Debug, Clone)]
 pub struct LaconicOTRecv<'a, E: Pairing, D: EvaluationDomain<E::ScalarField>> {
     ck: &'a CommitmentKey<E, D>,
     qs: Vec<E::G1>,
