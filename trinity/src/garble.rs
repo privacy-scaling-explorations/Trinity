@@ -19,7 +19,7 @@ pub struct GarbledBundle {
 
 pub fn generate_garbled_circuit(
     circ: Arc<Circuit>,
-    gb_inputs: [u8; 1],
+    gb_inputs: [u16; 1],
     rng: &mut StdRng,
     delta: Delta,
     setup_params: &SetupParams,
@@ -37,7 +37,7 @@ pub fn generate_garbled_circuit(
         .collect();
 
     // === Step 2: Garbler generates evaluator input label pairs (zero/one keys) ===
-    let evaluator_label_pairs: Vec<(Key, Key)> = (0..8)
+    let evaluator_label_pairs: Vec<(Key, Key)> = (0..16)
         .map(|_| {
             let zero_label: Key = rng.gen();
             let one_label = Key::from(*zero_label.as_block() ^ delta.as_block());
@@ -91,7 +91,7 @@ pub fn generate_garbled_circuit(
     } = gen_iter.finish().unwrap();
 
     GarbledBundle {
-        garbler_macs, // ✅ Authenticated garbler inputs (MACs)
+        garbler_macs,
         ciphertexts,
         garbled_circuit,
         output_keys,

@@ -8,10 +8,6 @@ pub fn int_to_bits(n: u16) -> Vec<bool> {
     (0..16).map(|i| (n >> i) & 1 == 1).collect()
 }
 
-pub fn u8_to_vec_bool(input: [u8; 1]) -> Vec<bool> {
-    (0..8).rev().map(|i| (input[0] & (1 << i)) != 0).collect()
-}
-
 #[allow(dead_code)]
 fn serialize_ciphertexts(ciphertexts: &[TrinityMsg]) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(8 + ciphertexts.len() * 64); // Preallocate reasonable space
@@ -75,11 +71,11 @@ mod tests {
         commit::KZGType,
         evaluate::{ev_commit, evaluate_circuit},
         garble::generate_garbled_circuit,
-        two_pc::{int_to_bits, setup, u8_to_vec_bool},
+        two_pc::setup,
     };
 
-    pub fn bool_array_to_u16(arr: &[bool]) -> Vec<u16> {
-        arr.iter().map(|&b| if b { 1 } else { 0 }).collect()
+    pub fn u16_to_vec_bool(input: [u16; 1]) -> Vec<bool> {
+        (0..16).map(|i| (input[0] >> i) & 1 == 1).collect() // LSB0
     }
 
     #[test]
@@ -87,27 +83,26 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(0);
 
         let circ = Circuit::parse(
-            "circuits/simple_8bit_add.txt",
+            "circuits/simple_16bit_add.txt",
             &[
-                ValueType::Array(Box::new(ValueType::U8), 1),
-                ValueType::Array(Box::new(ValueType::U8), 1),
+                ValueType::Array(Box::new(ValueType::U16), 1),
+                ValueType::Array(Box::new(ValueType::U16), 1),
             ],
-            &[ValueType::Array(Box::new(ValueType::U8), 1)],
+            &[ValueType::Array(Box::new(ValueType::U16), 1)],
         )
         .unwrap();
         let setup_bundle = setup(KZGType::Plain);
 
-        let garbler_input = [0u8];
-        let evaluator_input = [0u8];
-
-        let expected: [u8; 1] = [0u8];
+        let garbler_input = [4u16];
+        let evaluator_input = [2u16];
+        let expected: [u16; 1] = [6u16];
 
         let delta = Delta::random(&mut rng);
 
         let arc_circuit = Arc::new(circ.clone());
 
         let evaluator_commitment =
-            ev_commit(u8_to_vec_bool(evaluator_input), &setup_bundle).unwrap();
+            ev_commit(u16_to_vec_bool(evaluator_input), &setup_bundle).unwrap();
 
         let garbled = generate_garbled_circuit(
             arc_circuit.clone(),
@@ -129,7 +124,7 @@ mod tests {
 
         println!("✅ Result: {:?}", result);
 
-        assert!(result == expected);
+        assert!(result == expected[0]);
     }
 
     #[test]
@@ -137,27 +132,27 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(0);
 
         let circ = Circuit::parse(
-            "circuits/simple_8bit_add.txt",
+            "circuits/simple_16bit_add.txt",
             &[
-                ValueType::Array(Box::new(ValueType::U8), 1),
-                ValueType::Array(Box::new(ValueType::U8), 1),
+                ValueType::Array(Box::new(ValueType::U16), 1),
+                ValueType::Array(Box::new(ValueType::U16), 1),
             ],
-            &[ValueType::Array(Box::new(ValueType::U8), 1)],
+            &[ValueType::Array(Box::new(ValueType::U16), 1)],
         )
         .unwrap();
         let setup_bundle = setup(KZGType::Halo2);
 
-        let garbler_input = [4u8];
-        let evaluator_input = [2u8];
+        let garbler_input = [4u16];
+        let evaluator_input = [2u16];
 
-        let expected: [u8; 1] = [6u8];
+        let expected: [u16; 1] = [6u16];
 
         let delta = Delta::random(&mut rng);
 
         let arc_circuit = Arc::new(circ.clone());
 
         let evaluator_commitment =
-            ev_commit(u8_to_vec_bool(evaluator_input), &setup_bundle).unwrap();
+            ev_commit(u16_to_vec_bool(evaluator_input), &setup_bundle).unwrap();
 
         let garbled = generate_garbled_circuit(
             arc_circuit.clone(),
@@ -179,7 +174,7 @@ mod tests {
 
         println!("✅ Result: {:?}", result);
 
-        assert!(result == expected);
+        assert!(result == expected[0]);
     }
 
     #[test]

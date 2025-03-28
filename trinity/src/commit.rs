@@ -81,7 +81,7 @@ pub struct Trinity {
     pub params: TrinityParams,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum TrinityMsg {
     Plain(laconic_ot::Msg<Bn254>),
     Halo2(halo2_we_kzg::Msg),
