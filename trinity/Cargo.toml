@@ -7,23 +7,29 @@ edition = "2021"
 
 [dependencies]
 laconic-ot = { path = "../research_we_kzg" }
-halo2_we_kzg = { path = "../halo2_we_kzg" }
-rand = "0.8"
-rand_chacha = "0.3"
-rand_core = "0.6"
 ark-ec = "0.4.0"
 ark-ff = "0.4.0"
 ark-bn254 = "0.4.0"
 ark-poly = "0.4.0"
-fancy-garbling = { path = "../../swanky/fancy-garbling", features = ["serde"] }
-scuttlebutt = { path = "../../swanky/scuttlebutt" }
-ocelot = { path = "../../swanky/ocelot" }
 serde_json = "1.0.140"
 lazy_static = "1.5.0"
 wasm-pack = "0.13.1"
-wasm-bindgen = "0.2.100"
+wasm-bindgen = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
+rand = { version = "0.8.5", features = ["getrandom"] }
+getrandom = { version = "0.2", features = ["js"] }
+mpz-garble-core = { git = "https://github.com/privacy-scaling-explorations/mpz.git", branch = "dev" }
+mpz-circuits = { git = "https://github.com/privacy-scaling-explorations/mpz.git", branch = "dev" }
+mpz-core = { git = "https://github.com/privacy-scaling-explorations/mpz.git", branch = "dev" }
+itybity = "0.3.1"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [patch.crates-io]
+halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+halo2_we_kzg = { path = "../halo2_we_kzg" }
 halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
