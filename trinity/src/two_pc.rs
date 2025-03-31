@@ -93,9 +93,9 @@ mod tests {
         .unwrap();
         let setup_bundle = setup(KZGType::Plain);
 
-        let garbler_input = [4u16];
-        let evaluator_input = [2u16];
-        let expected: [u16; 1] = [6u16];
+        let garbler_input = [6u16];
+        let evaluator_input = [4u16];
+        let expected: [u16; 1] = [10u16];
 
         let delta = Delta::random(&mut rng);
 

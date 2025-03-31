@@ -50,10 +50,7 @@ pub fn evaluate_circuit(
     ot_receiver: KZGOTReceiver<'_, ()>,
 ) -> Result<u16, Error> {
     // === Step 1: Evaluator decrypts labels for its input using OT ===
-    let evaluator_bits = evaluator_input
-        .into_iter_lsb0()
-        .rev() // Flip to MSB0
-        .collect::<Vec<bool>>();
+    let evaluator_bits = evaluator_input.into_iter_lsb0().collect::<Vec<bool>>();
 
     let evaluator_labels: Vec<Key> = (0..16)
         .map(|i| {
@@ -61,7 +58,14 @@ pub fn evaluate_circuit(
                 .trinity_receiver
                 .recv(i, garbler_bundle.ciphertexts[i]);
             let block = Block::new(decrypted);
-            Key::from(block)
+            let key = Key::from(block);
+            // If evaluator's bit is 1, adjust the key by XOR-ing with delta.
+            if evaluator_bits[i] {
+                let shifted_block = *key.as_block() ^ *delta.as_block();
+                Key::from(shifted_block)
+            } else {
+                key
+            }
         })
         .collect();
 
