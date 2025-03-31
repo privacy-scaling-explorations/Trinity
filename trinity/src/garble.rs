@@ -10,6 +10,7 @@ use crate::{
     two_pc::SetupParams,
 };
 
+#[derive(Clone, Debug)]
 pub struct GarbledBundle {
     pub garbler_macs: Vec<Mac>,
     pub ciphertexts: Vec<TrinityMsg>,

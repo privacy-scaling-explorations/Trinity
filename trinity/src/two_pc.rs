@@ -1,47 +1,11 @@
 use std::sync::Arc;
 
-use crate::commit::{KZGType, Trinity, TrinityMsg};
+use crate::commit::{KZGType, Trinity};
 
 const MSG_SIZE: usize = 16;
 
-pub fn int_to_bits(n: u16) -> Vec<bool> {
-    (0..16).map(|i| (n >> i) & 1 == 1).collect()
-}
-
-#[allow(dead_code)]
-fn serialize_ciphertexts(ciphertexts: &[TrinityMsg]) -> Vec<u8> {
-    let mut serialized = Vec::with_capacity(8 + ciphertexts.len() * 64); // Preallocate reasonable space
-
-    serialized.extend(&(ciphertexts.len() as u64).to_le_bytes()); // encode length
-
-    for ct in ciphertexts {
-        let ct_bytes = ct.serialize();
-        serialized.extend(&(ct_bytes.len() as u64).to_le_bytes()); // encode message length
-        serialized.extend_from_slice(&ct_bytes); // append message content
-    }
-
-    serialized.shrink_to_fit(); // Reduce excessive memory allocation
-    serialized
-}
-
-#[allow(dead_code)]
-fn deserialize_ciphertexts(data: &[u8]) -> Vec<TrinityMsg> {
-    let mut ciphertexts = Vec::new();
-    let mut cursor = 0;
-
-    let len = u64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap()) as usize;
-    cursor += 8;
-
-    for _ in 0..len {
-        let ct_len = u64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap()) as usize;
-        cursor += 8;
-
-        let ct_bytes = &data[cursor..cursor + ct_len];
-        cursor += ct_len;
-
-        ciphertexts.push(TrinityMsg::deserialize(ct_bytes));
-    }
-    ciphertexts
+pub fn u16_to_vec_bool(input: [u16; 1]) -> Vec<bool> {
+    (0..16).map(|i| (input[0] >> i) & 1 == 1).collect() // LSB0
 }
 
 #[derive(Clone)]
@@ -60,7 +24,7 @@ mod tests {
     use std::sync::Arc;
 
     use itybity::{FromBitIterator, IntoBitIterator, ToBits};
-    use mpz_circuits::{types::ValueType, Circuit};
+    use mpz_circuits::{ops::WrappingAdd, types::ValueType, Circuit, CircuitBuilder};
     use mpz_garble_core::{
         evaluate_garbled_circuits, Delta, EvaluatorOutput, GarbledCircuit, Generator,
         GeneratorOutput, Key, Mac,
@@ -71,11 +35,20 @@ mod tests {
         commit::KZGType,
         evaluate::{ev_commit, evaluate_circuit},
         garble::generate_garbled_circuit,
-        two_pc::setup,
+        two_pc::{setup, u16_to_vec_bool},
     };
 
-    pub fn u16_to_vec_bool(input: [u16; 1]) -> Vec<bool> {
-        (0..16).map(|i| (input[0] >> i) & 1 == 1).collect() // LSB0
+    fn create_minimal_circuit() -> Circuit {
+        let builder = CircuitBuilder::new();
+
+        let a = builder.add_input::<u8>();
+        let b = builder.add_input::<u8>();
+
+        let c = a.wrapping_add(b);
+
+        builder.add_output(c);
+
+        builder.build().unwrap()
     }
 
     #[test]
@@ -181,15 +154,16 @@ mod tests {
     fn test_garble_simple_add_ev_private() {
         let mut rng = StdRng::seed_from_u64(0);
 
-        let circ = Circuit::parse(
-            "circuits/simple_8bit_add.txt",
-            &[
-                ValueType::Array(Box::new(ValueType::U8), 1),
-                ValueType::Array(Box::new(ValueType::U8), 1),
-            ],
-            &[ValueType::Array(Box::new(ValueType::U8), 1)],
-        )
-        .unwrap();
+        // let circ = Circuit::parse(
+        //     "circuits/simple_8bit_add.txt",
+        //     &[
+        //         ValueType::Array(Box::new(ValueType::U8), 1),
+        //         ValueType::Array(Box::new(ValueType::U8), 1),
+        //     ],
+        //     &[ValueType::Array(Box::new(ValueType::U8), 1)],
+        // )
+        // .unwrap();
+        let circ = create_minimal_circuit();
 
         let arc_circuit = Arc::new(circ.clone());
 

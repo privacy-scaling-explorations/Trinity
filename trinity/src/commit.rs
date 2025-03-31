@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use ark_bn254::{Bn254, Fr};
 use ark_poly::Radix2EvaluationDomain;
+#[cfg(not(target_arch = "wasm32"))]
 use halo2_we_kzg::{
     Com as Halo2Com, Halo2Params, LaconicOTRecv as Halo2OTRecv, LaconicOTSender as Halo2OTSender,
 };
@@ -40,6 +41,7 @@ impl From<TrinityChoice> for laconic_ot::Choice {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<TrinityChoice> for halo2_we_kzg::Choice {
     fn from(ch: TrinityChoice) -> Self {
         match ch {
@@ -49,33 +51,40 @@ impl From<TrinityChoice> for halo2_we_kzg::Choice {
     }
 }
 
+#[allow(dead_code)]
 pub enum KZGType {
     Plain,
+    #[cfg(not(target_arch = "wasm32"))]
     Halo2,
 }
 
 #[derive(Clone)]
 pub enum TrinityParams {
     Plain(Arc<CommitmentKey<Bn254, Radix2EvaluationDomain<Fr>>>),
+    #[cfg(not(target_arch = "wasm32"))]
     Halo2(Arc<Halo2Params>),
 }
 
 #[derive(Clone, Copy)]
 pub enum TrinityCom {
     Plain(PlainCom<Bn254>),
+    #[cfg(not(target_arch = "wasm32"))]
     Halo2(Halo2Com),
 }
 
 pub enum TrinityReceiver<'a> {
     Plain(PlainOTRecv<'a, Bn254, Radix2EvaluationDomain<Fr>>),
+    #[cfg(not(target_arch = "wasm32"))]
     Halo2(Halo2OTRecv),
 }
 
 pub enum TrinitySender<'a> {
     Plain(PlainOTSender<'a, Bn254, Radix2EvaluationDomain<Fr>>),
+    #[cfg(not(target_arch = "wasm32"))]
     Halo2(Halo2OTSender),
 }
 
+#[allow(dead_code)]
 pub struct Trinity {
     pub mode: KZGType,
     pub params: TrinityParams,
@@ -84,50 +93,8 @@ pub struct Trinity {
 #[derive(Clone, Copy, Debug)]
 pub enum TrinityMsg {
     Plain(laconic_ot::Msg<Bn254>),
+    #[cfg(not(target_arch = "wasm32"))]
     Halo2(halo2_we_kzg::Msg),
-}
-
-impl TrinityMsg {
-    pub fn serialize(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-
-        match self {
-            TrinityMsg::Plain(msg) => {
-                out.push(0); // variant tag for Plain
-                let msg_bytes = msg.serialize();
-                out.extend((msg_bytes.len() as u64).to_le_bytes()); // Store length
-                out.extend(msg_bytes);
-            }
-            TrinityMsg::Halo2(msg) => {
-                out.push(1); // variant tag for Halo2
-                let msg_bytes = msg.serialize();
-                out.extend((msg_bytes.len() as u64).to_le_bytes()); // Store length
-                out.extend(msg_bytes);
-            }
-        }
-        out
-    }
-
-    pub fn deserialize(bytes: &[u8]) -> Self {
-        if bytes.is_empty() {
-            panic!("Invalid serialized data");
-        }
-
-        let variant = bytes[0]; // Read the variant tag
-        let len = u64::from_le_bytes(bytes[1..9].try_into().unwrap()) as usize; // Read length
-
-        match variant {
-            0 => {
-                let msg = laconic_ot::Msg::<Bn254>::deserialize(&bytes[9..9 + len]);
-                TrinityMsg::Plain(msg)
-            }
-            1 => {
-                let msg = halo2_we_kzg::Msg::deserialize(&bytes[9..9 + len]);
-                TrinityMsg::Halo2(msg)
-            }
-            _ => panic!("Unknown variant tag"),
-        }
-    }
 }
 
 impl Trinity {
@@ -141,6 +108,7 @@ impl Trinity {
                         .expect("setup failed");
                 TrinityParams::Plain(Arc::new(plainparams))
             }
+            #[cfg(not(target_arch = "wasm32"))]
             KZGType::Halo2 => {
                 // To Do: Have cleaner way to transpose message_length to degree for Halo2
                 let degree = message_length;
@@ -178,6 +146,7 @@ impl<'a> TrinityReceiver<'a> {
                 let plain_recv = PlainOTRecv::new(ck_arc.as_ref(), &plain_bits);
                 TrinityReceiver::Plain(plain_recv)
             }
+            #[cfg(not(target_arch = "wasm32"))]
             TrinityParams::Halo2(halo2_params_arc) => {
                 let halo2_bits: Vec<halo2_we_kzg::Choice> = bits
                     .iter()
@@ -192,6 +161,7 @@ impl<'a> TrinityReceiver<'a> {
     pub fn recv(&self, i: usize, msg: TrinityMsg) -> [u8; MSG_SIZE] {
         match (self, msg) {
             (TrinityReceiver::Plain(recv), TrinityMsg::Plain(msg)) => recv.recv(i, msg),
+            #[cfg(not(target_arch = "wasm32"))]
             (TrinityReceiver::Halo2(recv), TrinityMsg::Halo2(msg)) => recv.recv(i, msg),
             _ => panic!("Mismatched receiver and message types"),
         }
@@ -200,6 +170,7 @@ impl<'a> TrinityReceiver<'a> {
     pub fn commitment(&self) -> TrinityCom {
         match self {
             TrinityReceiver::Plain(recv) => TrinityCom::Plain(recv.commitment()),
+            #[cfg(not(target_arch = "wasm32"))]
             TrinityReceiver::Halo2(recv) => TrinityCom::Halo2(recv.commitment()),
         }
     }
@@ -211,6 +182,7 @@ impl<'a> TrinitySender<'a> {
             (TrinityParams::Plain(ck), TrinityCom::Plain(com)) => {
                 TrinitySender::Plain(PlainOTSender::new(ck.as_ref(), com))
             }
+            #[cfg(not(target_arch = "wasm32"))]
             (TrinityParams::Halo2(params_arc), TrinityCom::Halo2(com)) => {
                 TrinitySender::Halo2(Halo2OTSender::new(
                     params_arc.as_ref().clone().params,
@@ -231,6 +203,7 @@ impl<'a> TrinitySender<'a> {
     ) -> TrinityMsg {
         match self {
             TrinitySender::Plain(sender) => TrinityMsg::Plain(sender.send(rng, i, m0, m1)),
+            #[cfg(not(target_arch = "wasm32"))]
             TrinitySender::Halo2(sender) => TrinityMsg::Halo2(sender.send(rng, i, m0, m1)),
         }
     }
@@ -268,6 +241,7 @@ mod tests {
         assert_eq!(res, m0);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn test_halo2_laconic_ot() {
         let rng = &mut OsRng;
