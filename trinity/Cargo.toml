@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-laconic-ot = { path = "../research_we_kzg" }
+laconic-ot = { path = "../plain_lot" }
 ark-bn254 = "0.4.0"
 ark-poly = "0.4.0"
 serde_json = "1.0.140"
@@ -19,7 +19,7 @@ mpz-garble-core = { git = "https://github.com/privacy-scaling-explorations/mpz.g
 mpz-circuits = { git = "https://github.com/privacy-scaling-explorations/mpz.git", branch = "dev" }
 mpz-core = { git = "https://github.com/privacy-scaling-explorations/mpz.git", branch = "dev" }
 itybity = "0.3.1"
-halo2_we_kzg = { path = "../halo2_we_kzg" }
+halo2_we_kzg = { path = "../halo2_lot" }
 halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
 
 [lib]

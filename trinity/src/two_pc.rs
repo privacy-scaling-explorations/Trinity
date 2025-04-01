@@ -8,6 +8,36 @@ pub fn u16_to_vec_bool(input: [u16; 1]) -> Vec<bool> {
     (0..16).map(|i| (input[0] >> i) & 1 == 1).collect() // LSB0
 }
 
+pub fn u8_vec_to_vec_bool(input: Vec<u8>) -> Vec<bool> {
+    let mut result = Vec::with_capacity(input.len() * 8);
+
+    for &byte in &input {
+        // Extract all 8 bits from each byte (LSB0 order)
+        for i in 0..8 {
+            result.push((byte >> i) & 1 == 1);
+        }
+    }
+
+    result
+}
+
+pub fn u8_vec_to_u16_array(input: Vec<u8>) -> [u16; 1] {
+    // Default to 0 if no input
+    if input.is_empty() {
+        return [0];
+    }
+
+    // Get first byte (or 0 if missing)
+    let byte0 = *input.get(0).unwrap_or(&0);
+    // Get second byte (or 0 if missing)
+    let byte1 = *input.get(1).unwrap_or(&0);
+
+    // Combine bytes in little-endian order
+    let value = ((byte1 as u16) << 8) | (byte0 as u16);
+
+    [value]
+}
+
 #[derive(Clone)]
 pub struct SetupParams {
     pub trinity: Arc<Trinity>,
