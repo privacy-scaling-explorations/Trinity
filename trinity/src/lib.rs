@@ -9,7 +9,7 @@ use std::sync::Arc;
 use commit::{KZGType, TrinityCom};
 use evaluate::{ev_commit, evaluate_circuit};
 use garble::{generate_garbled_circuit, GarbledBundle};
-use mpz_circuits::{ops::WrappingAdd, types::ValueType, Circuit, CircuitBuilder};
+use mpz_circuits::{types::ValueType, Circuit};
 use mpz_garble_core::Delta;
 use ot::KZGOTReceiver;
 use rand::{rngs::StdRng, SeedableRng};
@@ -17,31 +17,30 @@ use two_pc::{setup, u8_vec_to_u16_array, u8_vec_to_vec_bool, SetupParams};
 
 use wasm_bindgen::prelude::*;
 
-// Helper function to create a circuit
-pub fn create_circuit_from_path() -> Circuit {
-    Circuit::parse(
-        "circuits/simple_16bit_add.txt",
+/// Parse a circuit from a string
+#[wasm_bindgen]
+pub fn parse_circuit(
+    circuit_str: &str,
+    evaluator_input_size: usize,
+    garbler_input_size: usize,
+    output_size: usize,
+) -> Result<CircuitWrapper, JsError> {
+    let circuit = Circuit::parse_str(
+        circuit_str,
         &[
-            ValueType::Array(Box::new(ValueType::U16), 1),
-            ValueType::Array(Box::new(ValueType::U16), 1),
+            ValueType::Array(Box::new(ValueType::Bit), evaluator_input_size),
+            ValueType::Array(Box::new(ValueType::Bit), garbler_input_size),
         ],
-        &[ValueType::Array(Box::new(ValueType::U16), 1)],
+        &[ValueType::Array(Box::new(ValueType::Bit), output_size)],
     )
-    .unwrap()
+    .map_err(|e| JsError::new(&format!("Failed to parse circuit: {}", e)))?;
+
+    Ok(CircuitWrapper(Arc::new(circuit)))
 }
 
-pub fn create_circuit() -> Circuit {
-    let builder = CircuitBuilder::new();
-
-    let a = builder.add_input::<u16>();
-    let b = builder.add_input::<u16>();
-
-    let c = a.wrapping_add(b);
-
-    builder.add_output(c);
-
-    builder.build().unwrap()
-}
+/// Wrapper for Circuit to expose to JavaScript
+#[wasm_bindgen]
+pub struct CircuitWrapper(Arc<Circuit>);
 
 /// This struct holds the setup parameters
 #[wasm_bindgen]
@@ -107,10 +106,7 @@ impl TrinityEvaluator {
 
     /// Evaluate circuit
     #[wasm_bindgen]
-    pub fn evaluate(&mut self, garbled_data: &TrinityGarbler) -> u16 {
-        // Create circuit
-        let circuit = Arc::new(create_circuit());
-
+    pub fn evaluate(&mut self, garbled_data: &TrinityGarbler, circuit: CircuitWrapper) -> u16 {
         // Take OT receiver
         let ot_receiver = self.ot_receiver.take().unwrap();
 
@@ -118,7 +114,7 @@ impl TrinityEvaluator {
 
         // Evaluate garbled circuit
         let result = evaluate_circuit(
-            circuit,
+            circuit.0,
             garbled_data.bundle.clone(),
             evaluator_bits,
             garbled_data.delta,
@@ -145,6 +141,7 @@ impl TrinityGarbler {
         evaluator_commitment: &WasmCommitment,
         setup: &TrinityWasmSetup,
         garbler_input: Vec<u8>,
+        circuit: CircuitWrapper,
     ) -> TrinityGarbler {
         let garbler_bits = u8_vec_to_u16_array(garbler_input);
 
@@ -154,12 +151,9 @@ impl TrinityGarbler {
         // Generate random delta
         let delta = Delta::random(&mut rng);
 
-        // Create circuit
-        let circuit = Arc::new(create_circuit());
-
         // Generate garbled circuit
         let bundle = generate_garbled_circuit(
-            circuit,
+            circuit.0,
             garbler_bits,
             &mut rng,
             delta,

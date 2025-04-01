@@ -4,10 +4,6 @@ use crate::commit::{KZGType, Trinity};
 
 const MSG_SIZE: usize = 16;
 
-pub fn u16_to_vec_bool(input: [u16; 1]) -> Vec<bool> {
-    (0..16).map(|i| (input[0] >> i) & 1 == 1).collect() // LSB0
-}
-
 pub fn u8_vec_to_vec_bool(input: Vec<u8>) -> Vec<bool> {
     let mut result = Vec::with_capacity(input.len() * 8);
 
@@ -65,8 +61,12 @@ mod tests {
         commit::KZGType,
         evaluate::{ev_commit, evaluate_circuit},
         garble::generate_garbled_circuit,
-        two_pc::{setup, u16_to_vec_bool},
+        two_pc::setup,
     };
+
+    pub fn u16_to_vec_bool(input: [u16; 1]) -> Vec<bool> {
+        (0..16).map(|i| (input[0] >> i) & 1 == 1).collect() // LSB0
+    }
 
     fn create_minimal_circuit() -> Circuit {
         let builder = CircuitBuilder::new();
