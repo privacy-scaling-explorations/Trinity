@@ -97,7 +97,7 @@ mod tests {
 
         println!("✅ Result: {:?}", result);
 
-        assert!(result == expected[0]);
+        assert!(result == expected);
     }
 
     #[test]
@@ -147,7 +147,7 @@ mod tests {
 
         println!("✅ Result: {:?}", result);
 
-        assert!(result == expected[0]);
+        assert!(result == expected);
     }
 
     #[test]

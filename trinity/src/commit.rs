@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 
 use ark_bn254::{Bn254, Fr};
 use ark_poly::Radix2EvaluationDomain;
-#[cfg(not(target_arch = "wasm32"))]
 use halo2_we_kzg::{
     Com as Halo2Com, Halo2Params, LaconicOTRecv as Halo2OTRecv, LaconicOTSender as Halo2OTSender,
 };
@@ -41,7 +40,6 @@ impl From<TrinityChoice> for laconic_ot::Choice {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl From<TrinityChoice> for halo2_we_kzg::Choice {
     fn from(ch: TrinityChoice) -> Self {
         match ch {
@@ -51,36 +49,30 @@ impl From<TrinityChoice> for halo2_we_kzg::Choice {
     }
 }
 
-#[allow(dead_code)]
 pub enum KZGType {
     Plain,
-    #[cfg(not(target_arch = "wasm32"))]
     Halo2,
 }
 
 #[derive(Clone)]
 pub enum TrinityParams {
     Plain(Arc<CommitmentKey<Bn254, Radix2EvaluationDomain<Fr>>>),
-    #[cfg(not(target_arch = "wasm32"))]
     Halo2(Arc<Halo2Params>),
 }
 
 #[derive(Clone, Copy)]
 pub enum TrinityCom {
     Plain(PlainCom<Bn254>),
-    #[cfg(not(target_arch = "wasm32"))]
     Halo2(Halo2Com),
 }
 
 pub enum TrinityReceiver<'a> {
     Plain(PlainOTRecv<'a, Bn254, Radix2EvaluationDomain<Fr>>),
-    #[cfg(not(target_arch = "wasm32"))]
     Halo2(Halo2OTRecv),
 }
 
 pub enum TrinitySender<'a> {
     Plain(PlainOTSender<'a, Bn254, Radix2EvaluationDomain<Fr>>),
-    #[cfg(not(target_arch = "wasm32"))]
     Halo2(Halo2OTSender),
 }
 
@@ -93,7 +85,6 @@ pub struct Trinity {
 #[derive(Clone, Copy, Debug)]
 pub enum TrinityMsg {
     Plain(laconic_ot::Msg<Bn254>),
-    #[cfg(not(target_arch = "wasm32"))]
     Halo2(halo2_we_kzg::Msg),
 }
 
@@ -108,7 +99,6 @@ impl Trinity {
                         .expect("setup failed");
                 TrinityParams::Plain(Arc::new(plainparams))
             }
-            #[cfg(not(target_arch = "wasm32"))]
             KZGType::Halo2 => {
                 // To Do: Have cleaner way to transpose message_length to degree for Halo2
                 let degree = message_length;
@@ -146,7 +136,6 @@ impl<'a> TrinityReceiver<'a> {
                 let plain_recv = PlainOTRecv::new(ck_arc.as_ref(), &plain_bits);
                 TrinityReceiver::Plain(plain_recv)
             }
-            #[cfg(not(target_arch = "wasm32"))]
             TrinityParams::Halo2(halo2_params_arc) => {
                 let halo2_bits: Vec<halo2_we_kzg::Choice> = bits
                     .iter()
@@ -161,7 +150,6 @@ impl<'a> TrinityReceiver<'a> {
     pub fn recv(&self, i: usize, msg: TrinityMsg) -> [u8; MSG_SIZE] {
         match (self, msg) {
             (TrinityReceiver::Plain(recv), TrinityMsg::Plain(msg)) => recv.recv(i, msg),
-            #[cfg(not(target_arch = "wasm32"))]
             (TrinityReceiver::Halo2(recv), TrinityMsg::Halo2(msg)) => recv.recv(i, msg),
             _ => panic!("Mismatched receiver and message types"),
         }
@@ -170,7 +158,6 @@ impl<'a> TrinityReceiver<'a> {
     pub fn commitment(&self) -> TrinityCom {
         match self {
             TrinityReceiver::Plain(recv) => TrinityCom::Plain(recv.commitment()),
-            #[cfg(not(target_arch = "wasm32"))]
             TrinityReceiver::Halo2(recv) => TrinityCom::Halo2(recv.commitment()),
         }
     }
@@ -182,7 +169,6 @@ impl<'a> TrinitySender<'a> {
             (TrinityParams::Plain(ck), TrinityCom::Plain(com)) => {
                 TrinitySender::Plain(PlainOTSender::new(ck.as_ref(), com))
             }
-            #[cfg(not(target_arch = "wasm32"))]
             (TrinityParams::Halo2(params_arc), TrinityCom::Halo2(com)) => {
                 TrinitySender::Halo2(Halo2OTSender::new(
                     params_arc.as_ref().clone().params,
@@ -203,7 +189,6 @@ impl<'a> TrinitySender<'a> {
     ) -> TrinityMsg {
         match self {
             TrinitySender::Plain(sender) => TrinityMsg::Plain(sender.send(rng, i, m0, m1)),
-            #[cfg(not(target_arch = "wasm32"))]
             TrinitySender::Halo2(sender) => TrinityMsg::Halo2(sender.send(rng, i, m0, m1)),
         }
     }
@@ -241,7 +226,6 @@ mod tests {
         assert_eq!(res, m0);
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn test_halo2_laconic_ot() {
         let rng = &mut OsRng;

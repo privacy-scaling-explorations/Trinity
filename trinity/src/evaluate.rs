@@ -48,7 +48,7 @@ pub fn evaluate_circuit(
     evaluator_input: [u16; 1],
     delta: Delta,
     ot_receiver: KZGOTReceiver<'_, ()>,
-) -> Result<u16, Error> {
+) -> Result<[u16; 1], Error> {
     // === Step 1: Evaluator decrypts labels for its input using OT ===
     let evaluator_bits = evaluator_input.into_iter_lsb0().collect::<Vec<bool>>();
 
@@ -113,10 +113,7 @@ pub fn evaluate_circuit(
         })
         .collect();
 
-    println!("output_bits (LSB0): {:?}", output_bits);
+    let output: [u16; 1] = <[u16; 1]>::from_lsb0_iter(output_bits.iter().copied());
 
-    // let output: [u16; 1] = <[u16; 1]>::from_lsb0_iter(output_bits.iter().rev().copied());
-    let output: Vec<u8> = Vec::from_lsb0_iter(output_bits);
-
-    Ok(output[0] as u16)
+    Ok(output)
 }

@@ -19,6 +19,8 @@ mpz-garble-core = { git = "https://github.com/privacy-scaling-explorations/mpz.g
 mpz-circuits = { git = "https://github.com/privacy-scaling-explorations/mpz.git", branch = "dev" }
 mpz-core = { git = "https://github.com/privacy-scaling-explorations/mpz.git", branch = "dev" }
 itybity = "0.3.1"
+halo2_we_kzg = { path = "../halo2_we_kzg" }
+halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -26,6 +28,3 @@ crate-type = ["cdylib", "rlib"]
 [patch.crates-io]
 halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-halo2_we_kzg = { path = "../halo2_we_kzg" }
-halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }

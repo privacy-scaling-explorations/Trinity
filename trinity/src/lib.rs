@@ -30,7 +30,7 @@ pub fn create_circuit_from_path() -> Circuit {
     .unwrap()
 }
 
-fn create_circuit() -> Circuit {
+pub fn create_circuit() -> Circuit {
     let builder = CircuitBuilder::new();
 
     let a = builder.add_input::<u16>();
@@ -52,10 +52,14 @@ pub struct TrinityWasmSetup {
 #[wasm_bindgen]
 impl TrinityWasmSetup {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> TrinityWasmSetup {
-        // Hardcode to Plain KZG for simplicity
+    pub fn new(mode_str: &str) -> TrinityWasmSetup {
+        let mode = match mode_str {
+            "Plain" => KZGType::Plain,
+            "Halo2" => KZGType::Halo2,
+            _ => panic!("Invalid mode"),
+        };
         TrinityWasmSetup {
-            params: setup(KZGType::Plain),
+            params: setup(mode),
         }
     }
 }
@@ -124,7 +128,7 @@ impl TrinityEvaluator {
         )
         .unwrap();
 
-        result
+        result[0]
     }
 }
 
