@@ -94,7 +94,7 @@ impl TrinityEvaluator {
                 commitment: bundle.receiver_commitment,
             },
             ot_receiver: Some(bundle.ot_receiver),
-            evaluator_bits: evaluator_input,
+            evaluator_bits: evaluator_input.clone(),
         }
     }
 
@@ -106,7 +106,7 @@ impl TrinityEvaluator {
 
     /// Evaluate circuit
     #[wasm_bindgen]
-    pub fn evaluate(&mut self, garbled_data: &TrinityGarbler, circuit: CircuitWrapper) -> u16 {
+    pub fn evaluate(&mut self, garbled_data: &TrinityGarbler, circuit: &CircuitWrapper) -> u16 {
         // Take OT receiver
         let ot_receiver = self.ot_receiver.take().unwrap();
 
@@ -114,7 +114,7 @@ impl TrinityEvaluator {
 
         // Evaluate garbled circuit
         let result = evaluate_circuit(
-            circuit.0,
+            circuit.0.clone(),
             garbled_data.bundle.clone(),
             evaluator_bits,
             garbled_data.delta,
@@ -141,7 +141,7 @@ impl TrinityGarbler {
         evaluator_commitment: &WasmCommitment,
         setup: &TrinityWasmSetup,
         garbler_input: Vec<u8>,
-        circuit: CircuitWrapper,
+        circuit: &CircuitWrapper,
     ) -> TrinityGarbler {
         let garbler_bits = u8_vec_to_u16_array(garbler_input);
 
@@ -153,7 +153,7 @@ impl TrinityGarbler {
 
         // Generate garbled circuit
         let bundle = generate_garbled_circuit(
-            circuit.0,
+            circuit.0.clone(),
             garbler_bits,
             &mut rng,
             delta,
