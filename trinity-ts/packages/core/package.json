@@ -1,0 +1,46 @@
+{
+  "name": "@trinity/core",
+  "version": "0.1.0",
+  "description": "TypeScript bindings for Trinity 2PC protocol",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src/wasm/*.wasm"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./trinity_bg.wasm": "./dist/trinity_bg.wasm"
+  },
+  "sideEffects": [
+    "./dist/trinity_bg.wasm"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "build:wasm": "wasm-pack build --target bundler --out-name trinity --out-dir \"$(pwd)/src/wasm\" ../../../trinity",
+    "prepublishOnly": "npm run build:wasm && npm run build"
+  },
+  "tsup": {
+    "entry": [
+      "src/index.ts"
+    ],
+    "format": [
+      "cjs",
+      "esm"
+    ],
+    "dts": true,
+    "clean": true,
+    "sourcemap": true
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "fs": "0.0.1-security",
+    "path": "^0.12.7",
+    "tsup": "^8.4.0"
+  }
+}

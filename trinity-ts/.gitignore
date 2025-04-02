@@ -1,0 +1,69 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# WASM build artifacts
+**/src/wasm/*.js
+**/src/wasm/*.ts
+**/src/wasm/*.wasm
+**/src/wasm/*.d.ts
+**/src/wasm/package.json
+**/src/wasm/README.md
+**/src/wasm/.gitignore
+
+# Build outputs
+dist
+build
+out
+.next
+.nuxt
+.cache
+.vercel
+.output
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Testing
+coverage
+.nyc_output
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Package manager files
+.yarn/*
+!.yarn/cache
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnpm-store/
+
+# Bundle visualizer
+stats.html
