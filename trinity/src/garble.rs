@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use itybity::IntoBitIterator;
 use mpz_circuits::Circuit;
 use mpz_core::Block;
 use mpz_garble_core::{Delta, GarbledCircuit, Generator, GeneratorOutput, Key, Mac};
@@ -21,13 +20,12 @@ pub struct GarbledBundle {
 
 pub fn generate_garbled_circuit(
     circ: Arc<Circuit>,
-    gb_inputs: [u8; 1],
+    garbler_bits: Vec<bool>,
     rng: &mut StdRng,
     delta: Delta,
     setup_params: &SetupParams,
     receiver_commitment: TrinityCom,
 ) -> GarbledBundle {
-    let garbler_bits = gb_inputs.into_iter_lsb0().collect::<Vec<bool>>();
     let garbler_input_size = garbler_bits.len();
     let evaluator_input_size = circ.input_len() - garbler_input_size;
 

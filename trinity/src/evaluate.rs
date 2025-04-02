@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use mpz_circuits::Circuit;
 use mpz_core::Block;
-use mpz_garble_core::{evaluate_garbled_circuits, Delta, EvaluatorOutput, Key, Mac};
+use mpz_garble_core::{evaluate_garbled_circuits, EvaluatorOutput, Mac};
 
-use itybity::{FromBitIterator, IntoBitIterator};
+use itybity::FromBitIterator;
 
 use crate::commit::{TrinityChoice, TrinityCom};
 use crate::garble::GarbledBundle;
@@ -45,10 +45,9 @@ pub fn ev_commit(
 pub fn evaluate_circuit(
     circuit: Arc<Circuit>,
     garbler_bundle: GarbledBundle,
-    evaluator_input: [u8; 1],
+    evaluator_bits: Vec<bool>,
     ot_receiver: KZGOTReceiver<'_, ()>,
-) -> Result<Vec<u8>, Error> {
-    let evaluator_bits = evaluator_input.into_iter_lsb0().collect::<Vec<bool>>();
+) -> Result<Vec<bool>, Error> {
     let evaluator_input_size = evaluator_bits.len();
     let garbler_input_size = circuit.input_len() - evaluator_input_size;
 
@@ -80,7 +79,7 @@ pub fn evaluate_circuit(
     } = &outputs[0];
 
     // Create the final output using the decoding bits
-    let output: Vec<u8> = Vec::from_lsb0_iter(
+    let output: Vec<bool> = Vec::from_lsb0_iter(
         output_macs
             .iter()
             .enumerate()
