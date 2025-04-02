@@ -45,75 +45,47 @@ pub fn ev_commit(
 pub fn evaluate_circuit(
     circuit: Arc<Circuit>,
     garbler_bundle: GarbledBundle,
-    evaluator_input: [u16; 1],
-    delta: Delta,
+    evaluator_input: [u8; 1],
     ot_receiver: KZGOTReceiver<'_, ()>,
-) -> Result<[u16; 1], Error> {
-    // === Step 1: Evaluator decrypts labels for its input using OT ===
+) -> Result<Vec<u8>, Error> {
     let evaluator_bits = evaluator_input.into_iter_lsb0().collect::<Vec<bool>>();
+    let evaluator_input_size = evaluator_bits.len();
+    let garbler_input_size = circuit.input_len() - evaluator_input_size;
 
-    let evaluator_labels: Vec<Key> = (0..16)
-        .map(|i| {
-            let decrypted = ot_receiver
-                .trinity_receiver
-                .recv(i, garbler_bundle.ciphertexts[i]);
-            let block = Block::new(decrypted);
-            let key = Key::from(block);
-            // If evaluator's bit is 1, adjust the key by XOR-ing with delta.
-            if evaluator_bits[i] {
-                let shifted_block = *key.as_block() ^ *delta.as_block();
-                Key::from(shifted_block)
-            } else {
-                key
-            }
-        })
-        .collect();
+    let mut all_input_macs = garbler_bundle.all_input_macs.clone();
 
-    // === Step 2: Evaluator creates authenticated MACs for its inputs ===
-    let evaluator_macs: Vec<Mac> = evaluator_labels
-        .iter()
-        .zip(&evaluator_bits)
-        .enumerate()
-        .map(|(_, (key, &bit))| key.auth(bit, &delta))
-        .collect();
+    // Replace the placeholder MACs with real ones from OT
+    for i in 0..evaluator_input_size {
+        let ciphertext = &garbler_bundle.ciphertexts[i];
 
-    // === Step 3: Combine Garbler MACs with Evaluator MACs ===
-    let input_macs_for_eval: Vec<Mac> = garbler_bundle
-        .garbler_macs
-        .clone()
-        .into_iter()
-        .chain(evaluator_macs.iter().cloned())
-        .collect();
+        // Get MAC via OT
+        let decrypted = ot_receiver.trinity_receiver.recv(i, *ciphertext);
+        let block = Block::new(decrypted);
 
-    // === Step 4: Evaluate garbled circuit using input MACs ===
+        // Replace the placeholder at the correct position
+        // (after garbler inputs)
+        all_input_macs[garbler_input_size + i] = Mac::from(block);
+    }
+
+    // Evaluate the circuit with these input MACs
     let outputs = evaluate_garbled_circuits(vec![(
         circuit,
-        input_macs_for_eval,
+        all_input_macs,
         garbler_bundle.garbled_circuit,
     )])
     .unwrap();
 
-    // Assuming single circuit evaluation here
     let EvaluatorOutput {
         outputs: output_macs,
     } = &outputs[0];
 
-    // === Step 5: Decode output MACs to obtain actual bits ===
-    let output_bits: Vec<bool> = output_macs
-        .iter()
-        .zip(&garbler_bundle.output_keys)
-        .map(|(mac, key)| {
-            if mac == &key.auth(false, &delta) {
-                false
-            } else if mac == &key.auth(true, &delta) {
-                true
-            } else {
-                panic!("Output MAC does not match any known output labels");
-            }
-        })
-        .collect();
-
-    let output: [u16; 1] = <[u16; 1]>::from_lsb0_iter(output_bits.iter().copied());
+    // Create the final output using the decoding bits
+    let output: Vec<u8> = Vec::from_lsb0_iter(
+        output_macs
+            .iter()
+            .enumerate()
+            .map(|(i, mac)| mac.pointer() ^ garbler_bundle.decoding_bits[i]),
+    );
 
     Ok(output)
 }

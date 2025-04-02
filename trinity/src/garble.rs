@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use itybity::IntoBitIterator;
 use mpz_circuits::Circuit;
+use mpz_core::Block;
 use mpz_garble_core::{Delta, GarbledCircuit, Generator, GeneratorOutput, Key, Mac};
 use rand::{rngs::StdRng, Rng};
 
@@ -12,72 +13,74 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct GarbledBundle {
-    pub garbler_macs: Vec<Mac>,
     pub ciphertexts: Vec<TrinityMsg>,
     pub garbled_circuit: GarbledCircuit,
-    pub output_keys: Vec<Key>,
+    pub decoding_bits: Vec<bool>,
+    pub all_input_macs: Vec<Mac>,
 }
 
 pub fn generate_garbled_circuit(
     circ: Arc<Circuit>,
-    gb_inputs: [u16; 1],
+    gb_inputs: [u8; 1],
     rng: &mut StdRng,
     delta: Delta,
     setup_params: &SetupParams,
     receiver_commitment: TrinityCom,
 ) -> GarbledBundle {
-    // === Step 1: Garbler generates own input keys and authenticates inputs ===
     let garbler_bits = gb_inputs.into_iter_lsb0().collect::<Vec<bool>>();
-    let garbler_input_keys: Vec<Key> = garbler_bits.iter().map(|_| rng.gen()).collect();
+    let garbler_input_size = garbler_bits.len();
+    let evaluator_input_size = circ.input_len() - garbler_input_size;
 
-    // Authenticated garbler MACs for secure evaluation
-    let garbler_macs: Vec<Mac> = garbler_input_keys
-        .iter()
-        .zip(&garbler_bits)
-        .map(|(key, &bit)| key.auth(bit, &delta))
-        .collect();
+    let input_keys = (0..circ.input_len())
+        .map(|_| rng.gen())
+        .collect::<Vec<Key>>();
 
-    // === Step 2: Garbler generates evaluator input label pairs (zero/one keys) ===
-    let evaluator_label_pairs: Vec<(Key, Key)> = (0..16)
-        .map(|_| {
-            let zero_label: Key = rng.gen();
-            let one_label = Key::from(*zero_label.as_block() ^ delta.as_block());
-            (zero_label, one_label)
-        })
-        .collect();
+    // Instantiating all input MACs
+    let mut all_input_macs = Vec::with_capacity(circ.input_len());
+    // Create MACs for garbler inputs only (keys + bits)
+    for i in 0..garbler_input_size {
+        let key = &input_keys[i];
+        let bit = garbler_bits[i];
+        let mac = key.auth(bit, &delta);
+        all_input_macs.push(mac);
+    }
 
-    // === Step 3: Encrypt evaluator labels via OT ===
+    // Prepare OT for evaluator's inputs
     let ot_sender = setup_params
         .trinity
         .create_ot_sender::<()>(receiver_commitment);
 
-    let ciphertexts: Vec<TrinityMsg> = evaluator_label_pairs
-        .iter()
-        .enumerate()
-        .map(|(i, (zero, one))| {
-            let m0: [u8; 16] = zero.as_block().to_bytes().try_into().unwrap();
-            let m1: [u8; 16] = one.as_block().to_bytes().try_into().unwrap();
+    // Create and collect OT ciphertexts (ONLY for evaluator's inputs)
+    // Here we need to send message by label in order for the OT receiver to choose
+    // the correct label
+    // The garbler's input keys are already known, so we can use them directly
+    let ciphertexts: Vec<TrinityMsg> = (0..evaluator_input_size)
+        .map(|i| {
+            let key_idx = garbler_input_size + i;
+            let key = &input_keys[key_idx];
+
+            // Create the two possible labels for this bit
+            let zero_label = key.clone();
+            let one_label = Key::from(*key.as_block() ^ delta.as_block());
+
+            // Convert to bytes for OT
+            let m0: [u8; 16] = zero_label.as_block().to_bytes().try_into().unwrap();
+            let m1: [u8; 16] = one_label.as_block().to_bytes().try_into().unwrap();
+
+            // Send via OT - this is where evaluator will choose which to receive
             ot_sender.trinity_sender.send(rng, i, m0, m1)
         })
         .collect();
 
-    // === Step 4: Garbler uses evaluator zero-labels for garbling ===
-    let evaluator_zero_labels: Vec<Key> = evaluator_label_pairs
-        .iter()
-        .map(|(zero, _)| *zero)
-        .collect();
+    // Add placeholder MACs for evaluator inputs (these will be replaced during evaluation)
+    for _ in 0..evaluator_input_size {
+        all_input_macs.push(Mac::from(Block::ZERO));
+    }
 
-    // keys used for garbling (garbler keys + evaluator zero-labels)
-    let input_keys_for_garbling: Vec<Key> = garbler_input_keys
-        .iter()
-        .cloned()
-        .chain(evaluator_zero_labels)
-        .collect();
-
-    // === Step 5: Garble the circuit ===
+    // Garble the circuit
     let mut generator = Generator::default();
     let mut gen_iter = generator
-        .generate_batched(&circ, delta, input_keys_for_garbling)
+        .generate_batched(&circ, delta, input_keys)
         .unwrap();
 
     let mut gates = Vec::new();
@@ -91,10 +94,14 @@ pub fn generate_garbled_circuit(
         outputs: output_keys,
     } = gen_iter.finish().unwrap();
 
+    // Include decoding bits for the output keys
+    // These are the bits that will be used to decode the output
+    let decoding_bits: Vec<bool> = output_keys.iter().map(|key| key.pointer()).collect();
+
     GarbledBundle {
-        garbler_macs,
         ciphertexts,
         garbled_circuit,
-        output_keys,
+        decoding_bits,
+        all_input_macs,
     }
 }
