@@ -4,6 +4,12 @@
 
 Trinity is a one-round two-party computation (2PC) protocol that combines Laconic OT, garbled circuits, and PLONK to enable secure computation with zero-knowledge verified inputs. It allows mutually distrusting parties to compute securely without revealing their private inputs.
 
+## Security Disclaimer
+
+⚠️ **WARNING**: Trinity is a research project and is NOT ready for production use. The code has not undergone a formal security audit.
+
+This implementation is meant for research, educational purposes, and proof-of-concept demonstrations only.
+
 ## Features
 
 - Semi-honest garbling using the mpz garbling framework
@@ -42,17 +48,43 @@ The default circuit is located in `halo2_lot/src/circuit.rs`. Currently, it perf
 3. **Garbler Phase**: The garbler garbles the circuit, incorporates its inputs, and encrypts the evaluator's gates based on the commitments.
 4. **Evaluator Phase**: The evaluator obtains encrypted input labels via Laconic OT and evaluates the circuit to compute the output.
 
+## Prerequisites
+
+- Rust (1.70 or newer)
+- Node.js (18 or newer)
+- pnpm (8 or newer)
+- wasm-pack
+
 ## Building and Testing
 
+To test the Trinity Rust code
+
+### Rust Library
+
 ```bash
-# Build the library
+# Build the Rust library
 cd trinity
 cargo build --release
 
-# Run tests
+# Run Rust tests
 cargo test
+```
+
+### TypeScript Demo
+
+```bash
+# Build the TypeScript core (includes WASM compilation)
+cd trinity-ts/packages/core
+pnpm install
+pnpm build:wasm  # Builds WASM bindings
+pnpm build       # Compiles TypeScript
+
+# Run the demo app
+cd ../app
+pnpm install
+pnpm dev         # Starts development server at http://localhost:5173
 ```
 
 ## Acknowledgments
 
-We would like to thank all contributors, researchers, and supporters who have helped make Trinity possible. Special thanks to Vivek and the Cursive team for originally imagining the scheme, the research team behind the Laconic OT paper and their implementation, and Nakul for his invaluable help in integrating secure garbling. Additionally, we extend our gratitude to the authors of the mpz garbling framework and the PSE Halo2 team for their foundational work and inspiration.
+We would like to thank all contributors, researchers, and supporters who have helped make Trinity possible. Special thanks to Vivek and the Cursive team for originally imagining the scheme, the research team behind the Laconic OT paper and their implementation, and Nakul for his help in integrating secure garbling. Additionally, we extend our gratitude to the authors of the mpz garbling framework and the PSE Halo2 team for their foundational work and inspiration.

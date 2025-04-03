@@ -243,9 +243,6 @@ function App() {
           {result !== null && (
             <div className="result">
               <h3>Result: {result}</h3>
-              <p>
-                {evaluatorInput} + {garblerInput} = {result}
-              </p>
 
               <button onClick={handleReset} className="reset-button">
                 Reset Computation

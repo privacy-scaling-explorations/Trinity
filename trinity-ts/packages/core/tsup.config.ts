@@ -1,6 +1,7 @@
+/// <reference types="node" />
 import { defineConfig } from "tsup";
-import { copyFileSync } from "fs";
 import { resolve } from "path";
+import { copyFileSync } from "fs";
 
 export default defineConfig({
   entry: ["src/index.ts"],
@@ -9,10 +10,10 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   onSuccess: async () => {
-    // Copy WASM files to dist folder
+    // Copy WASM files to dist folder using process.cwd()
     copyFileSync(
-      resolve(__dirname, "src/wasm/trinity_bg.wasm"),
-      resolve(__dirname, "dist/trinity_bg.wasm")
+      resolve(process.cwd(), "src/wasm/trinity_bg.wasm"),
+      resolve(process.cwd(), "dist/trinity_bg.wasm")
     );
   },
 });
