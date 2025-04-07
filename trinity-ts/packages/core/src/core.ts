@@ -1,4 +1,4 @@
-import init, {
+import init_wasm, {
   TrinityWasmSetup,
   TrinityEvaluator,
   TrinityGarbler,
@@ -45,11 +45,11 @@ export async function initTrinity(): Promise<TrinityModule> {
     try {
       // For browsers/bundlers that support import.meta
       const wasmUrl = new URL("./trinity_bg.wasm", import.meta.url).href;
-      await init(wasmUrl);
+      await init_wasm(wasmUrl);
       isInitialized = true;
     } catch (e) {
       // Fallback for environments like Node.js
-      await init();
+      await init_wasm();
       isInitialized = true;
     }
   }

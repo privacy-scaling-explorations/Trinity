@@ -9,6 +9,8 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: true,
+  external: ["./trinity_bg.wasm"],
+  noExternal: ["./wasm/*.js"],
   onSuccess: async () => {
     // Copy WASM files to dist folder using process.cwd()
     copyFileSync(

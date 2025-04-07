@@ -22,7 +22,7 @@
   ],
   "scripts": {
     "build": "tsup",
-    "build:wasm": "wasm-pack build --target bundler --out-name trinity --out-dir \"$(pwd)/src/wasm\" ../../../trinity",
+    "build:wasm": "wasm-pack build --target web --out-name trinity --out-dir \"$(pwd)/src/wasm\" ../../../trinity",
     "prepublishOnly": "npm run build:wasm && npm run build"
   },
   "tsup": {
