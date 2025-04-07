@@ -1,5 +1,7 @@
 # Trinity
 
+<img src="trinity_banner.png" alt="Trinity Banner" >
+
 ## Overview
 
 Trinity is a one-round two-party computation (2PC) protocol that combines Laconic OT, garbled circuits, and PLONK to enable secure computation with zero-knowledge verified inputs. It allows mutually distrusting parties to compute securely without revealing their private inputs.
@@ -20,12 +22,13 @@ This implementation is meant for research, educational purposes, and proof-of-co
 
 ## Architecture
 
-Trinity is built on the following key components:
+Trinity leverages three core cryptographic components to provide secure and efficient two-party computations:
 
-- **Garbled Circuits**: Converts circuits into a "garbled" form for 2PC using the mpz framework
-- **Laconic OT (LOT)**: Enables efficient oblivious transfer with minimal communication rounds, based on Extractable Witness Encryption for KZG polynomial commitments
-- **PLONK Integration**: Provides zero-knowledge proofs for input validation and commitment using Halo2
-- **KZG Commitment**: Facilitates polynomial commitments within the protocol
+- **Garbled Circuits (via [mpz](https://github.com/privacy-scaling-explorations/mpz))**: Transforms boolean computation circuits into a secure, obfuscated format, enabling two parties to jointly compute results without revealing their private inputs. Garbled circuits rely heavily on Oblivious Transfer (OT) protocols for secure label exchange.
+
+- **Laconic Oblivious Transfer (LOT)**: Employs Extractable Witness Encryption using KZG polynomial commitments to significantly reduce communication overhead, allowing efficient and secure transfer of encrypted inputs between parties.
+
+- **PLONK Integration (via [PSE Halo2](https://github.com/privacy-scaling-explorations/halo2))**: Utilizes KZG polynomial commitment schemes to generate zero-knowledge proofs, ensuring input validity and correctness. PLONK acts as the cryptographic bridge connecting LOT schemes and ZK proofs, enabling participants to securely prove properties about their private inputs.
 
 ## Usage
 
