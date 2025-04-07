@@ -9,11 +9,12 @@ use std::sync::Arc;
 use commit::{KZGType, TrinityCom};
 use evaluate::{ev_commit, evaluate_circuit};
 use garble::{generate_garbled_circuit, GarbledBundle};
+use itybity::IntoBitIterator;
 use mpz_circuits::{types::ValueType, Circuit};
 use mpz_garble_core::Delta;
 use ot::KZGOTReceiver;
 use rand::{rngs::StdRng, SeedableRng};
-use two_pc::{setup, u8_vec_to_u16_array, u8_vec_to_vec_bool, SetupParams};
+use two_pc::{setup, u8_vec_to_vec_bool, SetupParams};
 
 use wasm_bindgen::prelude::*;
 
@@ -74,14 +75,16 @@ pub struct WasmCommitment {
 pub struct TrinityEvaluator {
     commitment: WasmCommitment,
     ot_receiver: Option<KZGOTReceiver<'static, ()>>,
-    evaluator_bits: Vec<u8>,
+    evaluator_bits: Vec<bool>,
 }
 
 #[wasm_bindgen]
 impl TrinityEvaluator {
     #[wasm_bindgen(constructor)]
     pub fn new(setup: &TrinityWasmSetup, evaluator_input: Vec<u8>) -> TrinityEvaluator {
-        let evaluator_bits = u8_vec_to_vec_bool(evaluator_input.clone());
+        let evaluator_bits = u8_vec_to_vec_bool(evaluator_input.clone())
+            .into_iter_lsb0()
+            .collect::<Vec<bool>>();
 
         // Create static parameters
         let params: &'static SetupParams = Box::leak(Box::new(setup.params.clone()));
@@ -94,7 +97,7 @@ impl TrinityEvaluator {
                 commitment: bundle.receiver_commitment,
             },
             ot_receiver: Some(bundle.ot_receiver),
-            evaluator_bits: evaluator_input.clone(),
+            evaluator_bits: evaluator_bits.clone(),
         }
     }
 
@@ -106,23 +109,20 @@ impl TrinityEvaluator {
 
     /// Evaluate circuit
     #[wasm_bindgen]
-    pub fn evaluate(&mut self, garbled_data: &TrinityGarbler, circuit: &CircuitWrapper) -> u16 {
+    pub fn evaluate(&mut self, garbled_data: &TrinityGarbler, circuit: &CircuitWrapper) -> Vec<u8> {
         // Take OT receiver
         let ot_receiver = self.ot_receiver.take().unwrap();
-
-        let evaluator_bits = u8_vec_to_u16_array(self.evaluator_bits.clone());
 
         // Evaluate garbled circuit
         let result = evaluate_circuit(
             circuit.0.clone(),
             garbled_data.bundle.clone(),
-            evaluator_bits,
-            garbled_data.delta,
+            self.evaluator_bits.clone(),
             ot_receiver,
         )
         .unwrap();
 
-        result[0]
+        result.into_iter().map(u8::from).collect()
     }
 }
 
@@ -130,7 +130,6 @@ impl TrinityEvaluator {
 #[wasm_bindgen]
 pub struct TrinityGarbler {
     bundle: GarbledBundle,
-    delta: Delta,
 }
 
 #[wasm_bindgen]
@@ -143,7 +142,9 @@ impl TrinityGarbler {
         garbler_input: Vec<u8>,
         circuit: &CircuitWrapper,
     ) -> TrinityGarbler {
-        let garbler_bits = u8_vec_to_u16_array(garbler_input);
+        let garbler_bits = u8_vec_to_vec_bool(garbler_input)
+            .into_iter_lsb0()
+            .collect::<Vec<bool>>();
 
         // Create deterministic RNG
         let mut rng = StdRng::seed_from_u64(42);
@@ -161,7 +162,7 @@ impl TrinityGarbler {
             evaluator_commitment.commitment,
         );
 
-        TrinityGarbler { bundle, delta }
+        TrinityGarbler { bundle }
     }
 }
 
