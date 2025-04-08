@@ -11,7 +11,7 @@ use crate::{
     two_pc::SetupParams,
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct GarbledBundle {
     pub ciphertexts: Vec<TrinityMsg>,
     pub garbled_circuit: GarbledCircuit,

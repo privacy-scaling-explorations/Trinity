@@ -6,7 +6,7 @@ mod two_pc;
 
 use std::sync::Arc;
 
-use commit::{KZGType, TrinityCom};
+use commit::{KZGType, TrinityCom, TrinityMsg};
 use evaluate::{ev_commit, evaluate_circuit};
 use garble::{generate_garbled_circuit, GarbledBundle};
 use itybity::IntoBitIterator;
@@ -14,6 +14,7 @@ use mpz_circuits::{types::ValueType, Circuit};
 use mpz_garble_core::Delta;
 use ot::KZGOTReceiver;
 use rand::{rngs::StdRng, SeedableRng};
+use serde::{Deserialize, Serialize};
 use two_pc::{setup, u8_vec_to_vec_bool, SetupParams};
 
 use wasm_bindgen::prelude::*;
@@ -47,6 +48,49 @@ pub struct CircuitWrapper(Arc<Circuit>);
 #[wasm_bindgen]
 pub struct TrinityWasmSetup {
     params: SetupParams,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum SerializableTrinityMsg {
+    Plain(laconic_ot::SerializableMsg),
+    Halo2(halo2_we_kzg::laconic_ot::SerializableMsg),
+}
+
+impl From<TrinityMsg> for SerializableTrinityMsg {
+    fn from(msg: TrinityMsg) -> Self {
+        match msg {
+            TrinityMsg::Plain(m) => Self::Plain(m.into()),
+            TrinityMsg::Halo2(m) => Self::Halo2(m.into()),
+        }
+    }
+}
+
+impl TryFrom<SerializableTrinityMsg> for TrinityMsg {
+    type Error = &'static str;
+
+    fn try_from(s: SerializableTrinityMsg) -> Result<Self, Self::Error> {
+        match s {
+            SerializableTrinityMsg::Plain(m) => Ok(Self::Plain(
+                laconic_ot::Msg::try_from(m).map_err(|_| "deserialize plain failed")?,
+            )),
+            SerializableTrinityMsg::Halo2(m) => Ok(Self::Halo2(
+                halo2_we_kzg::Msg::try_from(m).map_err(|_| "deserialize halo2 failed")?,
+            )),
+        }
+    }
+}
+
+impl TrinityMsg {
+    pub fn serialize(&self) -> Vec<u8> {
+        let serializable: SerializableTrinityMsg = self.clone().into();
+        serde_json::to_vec(&serializable).expect("Serialization failed")
+    }
+
+    pub fn deserialize(data: &[u8]) -> Result<Self, &'static str> {
+        let serializable: SerializableTrinityMsg =
+            serde_json::from_slice(data).map_err(|_| "JSON deserialization failed")?;
+        TrinityMsg::try_from(serializable)
+    }
 }
 
 #[wasm_bindgen]
