@@ -4,13 +4,14 @@ use mpz_circuits::Circuit;
 use mpz_core::Block;
 use mpz_garble_core::{Delta, GarbledCircuit, Generator, GeneratorOutput, Key, Mac};
 use rand::{rngs::StdRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     commit::{TrinityCom, TrinityMsg},
     two_pc::SetupParams,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GarbledBundle {
     pub ciphertexts: Vec<TrinityMsg>,
     pub garbled_circuit: GarbledCircuit,

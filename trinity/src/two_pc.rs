@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use serde::Serialize;
+
 use crate::commit::{KZGType, Trinity};
 
 const MSG_SIZE: usize = 16;

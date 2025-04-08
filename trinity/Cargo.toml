@@ -16,11 +16,12 @@ serde-wasm-bindgen = "0.6"
 rand = { version = "0.8.5", features = ["getrandom"] }
 getrandom = { version = "0.2", features = ["js"] }
 mpz-garble-core = { git = "https://github.com/Meyanis95/mpz.git", branch = "feat/string_parser" }
-mpz-circuits = { git = "https://github.com/Meyanis95/mpz.git", branch = "feat/string_parser" }
+mpz-circuits = { git = "https://github.com/Meyanis95/mpz.git", branch = "feat/string_parser" , features = ["serde"]}
 mpz-core = { git = "https://github.com/Meyanis95/mpz.git", branch = "feat/string_parser" }
 itybity = "0.3.1"
 halo2_we_kzg = { path = "../halo2_lot" }
 halo2curves = { git = "https://github.com/Meyanis95/halo2curves.git", branch = "main" }
+bincode = "1.3.3"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

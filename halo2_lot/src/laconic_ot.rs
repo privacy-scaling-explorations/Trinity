@@ -47,25 +47,31 @@ pub struct SerializableMsg {
     pub h: [(Vec<u8>, [u8; MSG_SIZE]); 2],
 }
 
-impl Msg {
-    pub fn serialize(&self) -> Vec<u8> {
-        let serializable = SerializableMsg {
-            h: self.h.map(|(g2, msg)| {
-                let g2_bytes = g2.to_raw_bytes(); // Vec<u8> with length 128
-                (g2_bytes, msg)
-            }),
-        };
-        serde_json::to_vec(&serializable).unwrap()
+// Implement From trait to convert Msg to SerializableMsg
+impl From<Msg> for SerializableMsg {
+    fn from(msg: Msg) -> Self {
+        SerializableMsg {
+            h: [
+                (msg.h[0].0.to_raw_bytes(), msg.h[0].1),
+                (msg.h[1].0.to_raw_bytes(), msg.h[1].1),
+            ],
+        }
     }
+}
 
-    pub fn deserialize(data: &[u8]) -> Self {
-        let serializable: SerializableMsg = serde_json::from_slice(data).unwrap();
-        let h = serializable.h.map(|(g2_bytes, msg)| {
-            assert_eq!(g2_bytes.len(), 128, "Invalid length for G2Affine");
-            let g2 = G2Affine::from_raw_bytes(&g2_bytes).expect("Deserialization failed");
-            (g2, msg)
-        });
-        Self { h }
+// Implement TryFrom trait to convert SerializableMsg to Msg
+impl TryFrom<SerializableMsg> for Msg {
+    type Error = &'static str;
+
+    fn try_from(s: SerializableMsg) -> Result<Self, Self::Error> {
+        let g2_0 =
+            G2Affine::from_raw_bytes(&s.h[0].0).ok_or("Failed to deserialize first G2Affine")?;
+        let g2_1 =
+            G2Affine::from_raw_bytes(&s.h[1].0).ok_or("Failed to deserialize second G2Affine")?;
+
+        Ok(Msg {
+            h: [(g2_0, s.h[0].1), (g2_1, s.h[1].1)],
+        })
     }
 }
 
@@ -302,9 +308,11 @@ fn test_laconic_ot() {
 fn test_msg_halo2_serialization() {
     use halo2_proofs::halo2curves::bn256::G2Affine;
     use rand::rngs::OsRng;
+    use std::convert::{From, TryFrom};
 
     let rng = &mut OsRng;
 
+    // Create original message
     let original_msg = Msg {
         h: [
             (G2Affine::random(rng.clone()), [3u8; MSG_SIZE]),
@@ -312,11 +320,29 @@ fn test_msg_halo2_serialization() {
         ],
     };
 
-    let serialized = original_msg.serialize();
-    let deserialized_msg = Msg::deserialize(&serialized);
+    // Convert to serializable form
+    let serializable_msg = SerializableMsg::from(original_msg);
 
+    // Verify raw bytes are correct length
+    assert!(serializable_msg.h[0].0.len() > 0);
+    assert!(serializable_msg.h[1].0.len() > 0);
+
+    // Convert back to original type
+    let deserialized_msg = Msg::try_from(serializable_msg).expect("Deserialization failed");
+
+    // Verify everything matches
     assert_eq!(original_msg.h[0].1, deserialized_msg.h[0].1);
     assert_eq!(original_msg.h[1].1, deserialized_msg.h[1].1);
     assert_eq!(original_msg.h[0].0, deserialized_msg.h[0].0);
     assert_eq!(original_msg.h[1].0, deserialized_msg.h[1].0);
+
+    // Optional: For compatibility, verify we can still use bincode or serde_json if needed
+    let json_bytes = serde_json::to_vec(&SerializableMsg::from(original_msg))
+        .expect("JSON serialization failed");
+    let from_json = serde_json::from_slice::<SerializableMsg>(&json_bytes)
+        .expect("JSON deserialization failed");
+    let from_json_msg = Msg::try_from(from_json).expect("Conversion failed");
+
+    assert_eq!(original_msg.h[0].0, from_json_msg.h[0].0);
+    assert_eq!(original_msg.h[1].0, from_json_msg.h[1].0);
 }

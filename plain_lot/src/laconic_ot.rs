@@ -64,9 +64,35 @@ pub struct SerializableMsg {
     pub h: [(Vec<u8>, [u8; MSG_SIZE]); 2],
 }
 
-impl<E: Pairing> AsMut<[u8]> for Msg<E> {
-    fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.h[0].1
+impl<E: Pairing> From<Msg<E>> for SerializableMsg {
+    fn from(msg: Msg<E>) -> Self {
+        let mut buf0 = Vec::new();
+        let mut buf1 = Vec::new();
+        let _ = msg.h[0].0.serialize_uncompressed(&mut buf0);
+        let _ = msg.h[1].0.serialize_uncompressed(&mut buf1);
+
+        SerializableMsg {
+            h: [(buf0, msg.h[0].1), (buf1, msg.h[1].1)],
+        }
+    }
+}
+
+impl<E: Pairing> TryFrom<SerializableMsg> for Msg<E> {
+    type Error = ark_serialize::SerializationError;
+
+    fn try_from(s: SerializableMsg) -> Result<Self, Self::Error> {
+        Ok(Msg {
+            h: [
+                (
+                    E::G2Affine::deserialize_uncompressed(&s.h[0].0[..])?,
+                    s.h[0].1,
+                ),
+                (
+                    E::G2Affine::deserialize_uncompressed(&s.h[1].0[..])?,
+                    s.h[1].1,
+                ),
+            ],
+        })
     }
 }
 

@@ -9,6 +9,7 @@ use laconic_ot::{
     Com as PlainCom, CommitmentKey, LaconicOTRecv as PlainOTRecv, LaconicOTSender as PlainOTSender,
 };
 use rand::{rngs::OsRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use std::sync::Arc;
 
@@ -49,6 +50,7 @@ impl From<TrinityChoice> for halo2_we_kzg::Choice {
     }
 }
 
+#[derive(Serialize)]
 pub enum KZGType {
     Plain,
     Halo2,
@@ -76,13 +78,12 @@ pub enum TrinitySender<'a> {
     Halo2(Halo2OTSender),
 }
 
-#[allow(dead_code)]
 pub struct Trinity {
     pub mode: KZGType,
     pub params: TrinityParams,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum TrinityMsg {
     Plain(laconic_ot::Msg<Bn254>),
     Halo2(halo2_we_kzg::Msg),
