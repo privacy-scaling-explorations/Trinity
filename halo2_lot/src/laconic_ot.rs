@@ -2,19 +2,23 @@ use std::marker::PhantomData;
 
 use crate::{
     kzg_commitment_with_halo2_proof,
+    params::LaconicParams,
     poly_op::{eval_polynomial, poly_divide, serialize_cubic_ext_field},
     Halo2Params,
 };
-use halo2_backend::poly::{kzg::commitment::ParamsKZG, Coeff, Polynomial};
+use halo2_backend::poly::{Coeff, Polynomial};
 use halo2_middleware::zal::impls::PlonkEngineConfig;
 use halo2_proofs::{
     arithmetic::Field,
-    halo2curves::bn256::{Bn256, Fq, Fr, G1Affine, G2Affine, G1, G2},
-    halo2curves::ff_ext::{cubic::CubicExtField, quadratic::QuadExtField},
-    halo2curves::group::Curve,
-    halo2curves::pairing::Engine,
+    halo2curves::{
+        bn256::{Bn256, Fq, Fr, G1Affine, G2Affine, G1, G2},
+        ff_ext::{cubic::CubicExtField, quadratic::QuadExtField},
+        group::Curve,
+        pairing::Engine,
+    },
     poly::{
-        commitment::{Blind, ParamsProver},
+        commitment::{Blind, Params, ParamsProver},
+        kzg::commitment::ParamsKZG,
         EvaluationDomain,
     },
 };
@@ -109,7 +113,7 @@ pub struct LaconicOTRecv {
 
 #[derive(Debug, Clone)]
 pub struct LaconicOTSender {
-    params: ParamsKZG<Bn256>,
+    params: LaconicParams,
     com: Com,
     domain: EvaluationDomain<Fr>,
 }
@@ -229,7 +233,25 @@ fn decrypt<const N: usize>(pad: Gt, ct: &[u8; N]) -> [u8; N] {
 }
 
 impl LaconicOTSender {
-    pub fn new(params: ParamsKZG<Bn256>, com: Com, domain: EvaluationDomain<Fr>) -> Self {
+    pub fn new(_params: ParamsKZG<Bn256>, com: Com) -> Self {
+        let verifier_params = _params.verifier_params();
+        let domain = EvaluationDomain::new(1, verifier_params.k());
+        let params = LaconicParams {
+            k: verifier_params.k(),
+            g0: _params.g[0],
+            g2: _params.g2,
+            s_g2: _params.s_g2,
+        };
+
+        Self {
+            params,
+            com,
+            domain,
+        }
+    }
+
+    pub fn new_from(params: LaconicParams, com: Com) -> Self {
+        let domain = EvaluationDomain::new(1, params.k);
         Self {
             params,
             com,
@@ -248,7 +270,7 @@ impl LaconicOTSender {
         let r0 = Fr::random(&mut *rng);
         let r1 = Fr::random(&mut *rng);
 
-        let g1 = self.params.g[0];
+        let g1 = self.params.g0;
         let g2 = self.params.g2;
         let tau = self.params.s_g2;
 
@@ -288,14 +310,11 @@ fn test_laconic_ot() {
     let bitvector = [Choice::Zero, Choice::One, Choice::Zero, Choice::One];
 
     let halo2params = Halo2Params::setup(rng, degree).unwrap();
+    let laconic_params = LaconicParams::from(&halo2params);
 
     let receiver = LaconicOTRecv::new(halo2params, &bitvector);
 
-    let sender = LaconicOTSender::new(
-        receiver.halo2params.params.clone(),
-        receiver.commitment(),
-        receiver.halo2params.domain.clone(),
-    );
+    let sender = LaconicOTSender::new_from(laconic_params, receiver.commitment());
 
     let m0 = [0u8; MSG_SIZE];
     let m1 = [1u8; MSG_SIZE];

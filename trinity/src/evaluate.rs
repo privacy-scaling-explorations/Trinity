@@ -33,7 +33,10 @@ pub fn ev_commit(
         .collect();
 
     // === Evaluator: prepare OT receiver and commitment ===
-    let ot_receiver = setup_params.trinity.create_ot_receiver::<()>(&ev_trinity);
+    let ot_receiver = setup_params
+        .trinity
+        .create_ot_receiver::<()>(&ev_trinity)
+        .expect("Error while create the ot receiver.");
     let receiver_commitment = ot_receiver.trinity_receiver.commitment();
 
     Ok(EvaluatorBundle {

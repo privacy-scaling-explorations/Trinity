@@ -8,4 +8,4 @@ pub use crate::poly_op::{
 };
 pub use circuits::kzg_commitment_with_halo2_proof;
 pub use laconic_ot::{Choice, Com, LaconicOTRecv, LaconicOTSender, Msg};
-pub use params::Halo2Params;
+pub use params::{Halo2Params, LaconicParams, SerializableLaconicParams};
