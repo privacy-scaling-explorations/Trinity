@@ -66,6 +66,7 @@ mod tests {
         )
         .unwrap();
         let setup_bundle = setup(KZGType::Plain);
+        let trinity = setup_bundle.clone().trinity;
 
         let garbler_input = [6u16];
         let garbler_bits = garbler_input.into_iter_lsb0().collect::<Vec<bool>>();
@@ -84,7 +85,7 @@ mod tests {
             garbler_bits,
             &mut rng,
             delta,
-            &setup_bundle,
+            &trinity,
             evaluator_commitment.receiver_commitment,
         );
 
@@ -113,6 +114,7 @@ mod tests {
         )
         .unwrap();
         let setup_bundle = setup(KZGType::Halo2);
+        let trinity = setup_bundle.clone().trinity;
 
         let garbler_input = [6u16];
         let garbler_bits = garbler_input.into_iter_lsb0().collect::<Vec<bool>>();
@@ -131,7 +133,7 @@ mod tests {
             garbler_bits,
             &mut rng,
             delta,
-            &setup_bundle,
+            &trinity,
             evaluator_commitment.receiver_commitment,
         );
 

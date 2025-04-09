@@ -6,7 +6,7 @@ use mpz_garble_core::{Delta, GarbledCircuit, Generator, GeneratorOutput, Key, Ma
 use rand::{rngs::StdRng, Rng};
 
 use crate::{
-    commit::{TrinityCom, TrinityMsg},
+    commit::{Trinity, TrinityCom, TrinityMsg},
     two_pc::SetupParams,
 };
 
@@ -23,7 +23,7 @@ pub fn generate_garbled_circuit(
     garbler_bits: Vec<bool>,
     rng: &mut StdRng,
     delta: Delta,
-    setup_params: &SetupParams,
+    trinity: &Trinity,
     receiver_commitment: TrinityCom,
 ) -> GarbledBundle {
     let garbler_input_size = garbler_bits.len();
@@ -44,9 +44,7 @@ pub fn generate_garbled_circuit(
     }
 
     // Prepare OT for evaluator's inputs
-    let ot_sender = setup_params
-        .trinity
-        .create_ot_sender::<()>(receiver_commitment);
+    let ot_sender = trinity.create_ot_sender::<()>(receiver_commitment);
 
     // Create and collect OT ciphertexts (ONLY for evaluator's inputs)
     // Here we need to send message by label in order for the OT receiver to choose

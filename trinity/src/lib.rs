@@ -202,7 +202,7 @@ impl TrinityGarbler {
             garbler_bits,
             &mut rng,
             delta,
-            &setup.params,
+            &setup.params.trinity,
             evaluator_commitment.commitment,
         );
 
@@ -225,5 +225,110 @@ impl WasmCommitment {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         unimplemented!("Cannot create WasmCommitment directly from JS")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::commit::{Trinity, TrinityChoice};
+
+    use super::*;
+
+    fn u16_vec_to_vec_bool(values: Vec<u16>) -> Vec<bool> {
+        let mut result = Vec::new();
+        for value in values {
+            // Convert each u16 to its bit representation (16 bits)
+            for i in 0..16 {
+                result.push(((value >> i) & 1) == 1);
+            }
+        }
+        result
+    }
+
+    #[test]
+    fn two_pc_serialization_flow_halo2() {
+        // Setup RNG
+        let mut rng = StdRng::seed_from_u64(0);
+
+        // Load the circuit
+        let circ = Circuit::parse(
+            "circuits/simple_16bit_add.txt",
+            &[
+                ValueType::Array(Box::new(ValueType::Bit), 16),
+                ValueType::Array(Box::new(ValueType::Bit), 16),
+            ],
+            &[ValueType::Array(Box::new(ValueType::Bit), 16)],
+        )
+        .unwrap();
+        let arc_circuit = Arc::new(circ.clone());
+
+        // Define inputs and expected output
+        let garbler_input = [6u16];
+        let garbler_bits = garbler_input.into_iter_lsb0().collect::<Vec<bool>>();
+        let evaluator_input = [4u16];
+        let evaluator_bits = evaluator_input.into_iter_lsb0().collect::<Vec<bool>>();
+        let expected: [u16; 1] = [10u16];
+
+        // === EVALUATOR SETUP (SERVER) ===
+        // Create full Trinity setup
+        let evaluator_trinity = Trinity::setup(KZGType::Plain, 16);
+
+        // Create OT receiver and commitment
+        let ot_receiver = evaluator_trinity
+            .create_ot_receiver::<()>(
+                &evaluator_bits
+                    .iter()
+                    .map(|&b| {
+                        if b {
+                            TrinityChoice::One
+                        } else {
+                            TrinityChoice::Zero
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .expect("Failed to create receiver");
+
+        let commitment = ot_receiver.trinity_receiver.commitment();
+
+        // === SERIALIZATION FOR NETWORK TRANSFER ===
+        // Serialize parameters for garbler
+        let serialized_params = evaluator_trinity.to_sender_bytes();
+        println!("Serialized params size: {} bytes", serialized_params.len());
+
+        // === GARBLER SETUP (CLIENT) ===
+        // Deserialize parameters
+        let garbler_trinity = Trinity::from_sender_bytes(&serialized_params)
+            .expect("Failed to deserialize sender parameters");
+
+        // === SERIALIZE AND TRANSFER TO GARBLER ===
+        let serialized_params = evaluator_trinity.to_sender_bytes();
+
+        // === GARBLER SETUP ===
+        let garbler_trinity = Trinity::from_sender_bytes(&serialized_params)
+            .expect("Failed to deserialize sender parameters");
+
+        // Generate random delta
+        let delta = Delta::random(&mut rng);
+
+        // Create OT sender with commitment
+        let ot_sender = garbler_trinity.create_ot_sender::<()>(commitment);
+
+        // Generate garbled circuit
+        let garbled = generate_garbled_circuit(
+            arc_circuit.clone(),
+            garbler_bits,
+            &mut rng,
+            delta,
+            &garbler_trinity, // Note: we'd need to adjust this to use garbler_trinity
+            commitment,
+        );
+
+        // === BACK TO EVALUATOR ===
+        // Evaluate garbled circuit
+        let result = evaluate_circuit(arc_circuit, garbled, evaluator_bits, ot_receiver).unwrap();
+
+        // Verify result
+        assert_eq!(result, u16_vec_to_vec_bool(expected.to_vec()));
     }
 }

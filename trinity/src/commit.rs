@@ -233,8 +233,12 @@ impl Trinity {
 
         match bytes[0] {
             0 => {
-                // Deserialize Plain sender params
-                todo!()
+                let ck: CommitmentKey<_, _> =
+                    CommitmentKey::deserialize_uncompressed(&mut &bytes[1..])
+                        .map_err(|_| "Failed to deserialize CommitmentKey")?;
+                Ok(Self::setup_for_garbler(TrinitySenderParams::Plain(
+                    Arc::new(ck),
+                )))
             }
             1 => {
                 // Deserialize Halo2 sender params (LaconicParams)
@@ -270,9 +274,9 @@ impl Trinity {
             TrinityInnerParams::Full(params) => TrinitySender::new(params, com),
             TrinityInnerParams::Sender(sender_params) => {
                 match (sender_params, com) {
-                    (TrinitySenderParams::Plain(_), TrinityCom::Plain(_com)) => {
+                    (TrinitySenderParams::Plain(ck), TrinityCom::Plain(com)) => {
                         // Create Plain sender directly from plain sender params
-                        todo!()
+                        TrinitySender::Plain(PlainOTSender::new(ck.as_ref(), com))
                     }
                     (TrinitySenderParams::Halo2(laconic_params), TrinityCom::Halo2(com)) => {
                         TrinitySender::Halo2(Halo2OTSender::new_from(
