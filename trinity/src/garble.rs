@@ -5,10 +5,7 @@ use mpz_core::Block;
 use mpz_garble_core::{Delta, GarbledCircuit, Generator, GeneratorOutput, Key, Mac};
 use rand::{rngs::StdRng, Rng};
 
-use crate::{
-    commit::{Trinity, TrinityCom, TrinityMsg},
-    two_pc::SetupParams,
-};
+use crate::commit::{Trinity, TrinityCom, TrinityMsg};
 
 #[derive(Clone, Debug)]
 pub struct GarbledBundle {

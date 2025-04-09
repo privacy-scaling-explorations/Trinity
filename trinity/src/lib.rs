@@ -246,6 +246,43 @@ mod tests {
     }
 
     #[test]
+    fn test_trinity_com_serialization_roundtrip() {
+        use crate::commit::TrinityCom;
+
+        let original = TrinityCom::Plain(ark_bn254::G1Affine::default().into());
+        let json = original.serialize();
+        let deserialized = TrinityCom::deserialize(&json).unwrap();
+        match deserialized {
+            TrinityCom::Plain(g1) => assert_eq!(g1, ark_bn254::G1Affine::default()),
+            _ => panic!("Expected Plain commitment"),
+        }
+    }
+
+    #[test]
+    fn test_trinity_msg_serialization_roundtrip_halo2() {
+        use crate::commit::TrinityMsg;
+        use halo2_we_kzg::laconic_ot::Msg;
+        use halo2curves::bn256::G2Affine;
+
+        let g2 = G2Affine::generator();
+        let original_msg = TrinityMsg::Halo2(Msg {
+            h: [(g2, [1u8; 16]), (g2, [2u8; 16])],
+        });
+
+        let serialized = original_msg.serialize();
+        let deserialized = TrinityMsg::deserialize(&serialized).unwrap();
+
+        if let TrinityMsg::Halo2(m2) = deserialized {
+            assert_eq!(m2.h[0].1, [1u8; 16]);
+            assert_eq!(m2.h[1].1, [2u8; 16]);
+            assert_eq!(m2.h[0].0, g2);
+            assert_eq!(m2.h[1].0, g2);
+        } else {
+            panic!("Expected Halo2 message");
+        }
+    }
+
+    #[test]
     fn two_pc_serialization_flow_halo2() {
         // Setup RNG
         let mut rng = StdRng::seed_from_u64(0);
@@ -297,9 +334,6 @@ mod tests {
         println!("Serialized params size: {} bytes", serialized_params.len());
 
         // === GARBLER SETUP (CLIENT) ===
-        // Deserialize parameters
-        let garbler_trinity = Trinity::from_sender_bytes(&serialized_params)
-            .expect("Failed to deserialize sender parameters");
 
         // === SERIALIZE AND TRANSFER TO GARBLER ===
         let serialized_params = evaluator_trinity.to_sender_bytes();
@@ -310,9 +344,6 @@ mod tests {
 
         // Generate random delta
         let delta = Delta::random(&mut rng);
-
-        // Create OT sender with commitment
-        let ot_sender = garbler_trinity.create_ot_sender::<()>(commitment);
 
         // Generate garbled circuit
         let garbled = generate_garbled_circuit(

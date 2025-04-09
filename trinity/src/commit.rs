@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use ark_bn254::{Bn254, Fr};
+use ark_bn254::{Bn254, Fr, G1Affine};
 use ark_poly::Radix2EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use halo2_we_kzg::{
@@ -81,6 +81,60 @@ pub enum TrinityInnerParams {
 pub enum TrinityCom {
     Plain(PlainCom<Bn254>),
     Halo2(Halo2Com),
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum SerializableTrinityCom {
+    Plain(Vec<u8>), // Compressed G1
+    Halo2(Vec<u8>), // Whatever halo2 Com is
+}
+
+impl From<TrinityCom> for SerializableTrinityCom {
+    fn from(com: TrinityCom) -> Self {
+        match com {
+            TrinityCom::Plain(g1) => {
+                let mut bytes = Vec::new();
+                g1.serialize_compressed(&mut bytes).unwrap();
+                SerializableTrinityCom::Plain(bytes)
+            }
+            TrinityCom::Halo2(halo2_com) => {
+                let bytes = bincode::serialize(&halo2_com).unwrap(); // works if you enabled serde
+                SerializableTrinityCom::Halo2(bytes)
+            }
+        }
+    }
+}
+
+impl TryFrom<SerializableTrinityCom> for TrinityCom {
+    type Error = &'static str;
+
+    fn try_from(value: SerializableTrinityCom) -> Result<Self, Self::Error> {
+        match value {
+            SerializableTrinityCom::Plain(bytes) => {
+                let g1 = G1Affine::deserialize_compressed(&*bytes)
+                    .map_err(|_| "Failed to deserialize PlainCom")?;
+                Ok(TrinityCom::Plain(g1.into()))
+            }
+            SerializableTrinityCom::Halo2(bytes) => {
+                let com: Halo2Com =
+                    bincode::deserialize(&bytes).map_err(|_| "Failed to deserialize Halo2Com")?;
+                Ok(TrinityCom::Halo2(com))
+            }
+        }
+    }
+}
+
+impl TrinityCom {
+    pub fn serialize(&self) -> Vec<u8> {
+        let serializable: SerializableTrinityCom = (*self).into();
+        serde_json::to_vec(&serializable).expect("JSON serialization failed")
+    }
+
+    pub fn deserialize(data: &[u8]) -> Result<Self, &'static str> {
+        let serializable: SerializableTrinityCom =
+            serde_json::from_slice(data).map_err(|_| "JSON deserialization failed")?;
+        TrinityCom::try_from(serializable)
+    }
 }
 
 pub enum TrinityReceiver<'a> {
