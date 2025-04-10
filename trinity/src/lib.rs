@@ -6,7 +6,7 @@ mod two_pc;
 
 use std::sync::Arc;
 
-use commit::{KZGType, TrinityCom, TrinityMsg};
+use commit::{KZGType, SerializableTrinityCom, TrinityCom, TrinityMsg};
 use evaluate::{ev_commit, evaluate_circuit};
 use garble::{generate_garbled_circuit, GarbledBundle};
 use itybity::IntoBitIterator;
@@ -50,7 +50,7 @@ pub struct TrinityWasmSetup {
     params: SetupParams,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum SerializableTrinityMsg {
     Plain(laconic_ot::SerializableMsg),
     Halo2(halo2_we_kzg::laconic_ot::SerializableMsg),
@@ -106,6 +106,16 @@ impl TrinityWasmSetup {
             params: setup(mode),
         }
     }
+
+    pub fn to_sender_setup(&self) -> Vec<u8> {
+        self.params.to_sender_bytes()
+    }
+
+    pub fn from_sender_setup(bytes: &[u8]) -> Result<TrinityWasmSetup, JsError> {
+        let params = SetupParams::from_sender_bytes(bytes)
+            .map_err(|_| JsError::new("Failed to deserialize sender parameters"))?;
+        Ok(TrinityWasmSetup { params })
+    }
 }
 
 /// WASM wrapper for evaluator commitment
@@ -151,16 +161,26 @@ impl TrinityEvaluator {
         self.commitment.clone()
     }
 
+    /// Get serialized evaluator commitment
+    #[wasm_bindgen(getter)]
+    pub fn commitment_serialized(&self) -> String {
+        let com: SerializableTrinityCom = self.commitment.commitment.clone().into();
+        serde_json::to_string(&com).expect("Failed to serialize commitment")
+    }
+
     /// Evaluate circuit
     #[wasm_bindgen]
     pub fn evaluate(&mut self, garbled_data: &TrinityGarbler, circuit: &CircuitWrapper) -> Vec<u8> {
         // Take OT receiver
         let ot_receiver = self.ot_receiver.take().unwrap();
 
+        let received_bundle: GarbledBundle = bincode::deserialize(&garbled_data.bundle)
+            .expect("Failed to deserialize GarbledBundle");
+
         // Evaluate garbled circuit
         let result = evaluate_circuit(
             circuit.0.clone(),
-            garbled_data.bundle.clone(),
+            received_bundle,
             self.evaluator_bits.clone(),
             ot_receiver,
         )
@@ -173,7 +193,7 @@ impl TrinityEvaluator {
 /// WASM wrapper for garbler
 #[wasm_bindgen]
 pub struct TrinityGarbler {
-    bundle: GarbledBundle,
+    bundle: Vec<u8>,
 }
 
 #[wasm_bindgen]
@@ -181,11 +201,13 @@ impl TrinityGarbler {
     /// Generate garbled circuit with hardcoded inputs
     #[wasm_bindgen(constructor)]
     pub fn new(
-        evaluator_commitment: &WasmCommitment,
+        evaluator_commitment: String,
         setup: &TrinityWasmSetup,
         garbler_input: Vec<u8>,
         circuit: &CircuitWrapper,
     ) -> TrinityGarbler {
+        let deserialized_commitment = TrinityCom::deserialize(evaluator_commitment.as_bytes())
+            .expect("Failed to deserialize commitment");
         let garbler_bits = u8_vec_to_vec_bool(garbler_input)
             .into_iter_lsb0()
             .collect::<Vec<bool>>();
@@ -203,10 +225,15 @@ impl TrinityGarbler {
             &mut rng,
             delta,
             &setup.params.trinity,
-            evaluator_commitment.commitment,
+            deserialized_commitment,
         );
 
-        TrinityGarbler { bundle }
+        let serialized_bundle =
+            bincode::serialize(&bundle).expect("Failed to serialize GarbledBundle");
+
+        TrinityGarbler {
+            bundle: serialized_bundle,
+        }
     }
 }
 

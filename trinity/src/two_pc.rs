@@ -22,6 +22,20 @@ pub struct SetupParams {
     pub trinity: Arc<Trinity>,
 }
 
+impl SetupParams {
+    pub fn from_sender_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+        let trinity = Trinity::from_sender_bytes(bytes)?;
+        let arc_trinity = Arc::new(trinity);
+        Ok(Self {
+            trinity: arc_trinity,
+        })
+    }
+
+    pub fn to_sender_bytes(&self) -> Vec<u8> {
+        self.trinity.to_sender_bytes()
+    }
+}
+
 pub fn setup(mode: KZGType) -> SetupParams {
     let trinity = Arc::new(Trinity::setup(mode, MSG_SIZE));
 

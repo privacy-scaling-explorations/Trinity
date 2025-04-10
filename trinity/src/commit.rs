@@ -86,7 +86,7 @@ pub enum TrinityCom {
 #[derive(Serialize, Deserialize)]
 pub enum SerializableTrinityCom {
     Plain(Vec<u8>), // Compressed G1
-    Halo2(Vec<u8>), // Whatever halo2 Com is
+    Halo2(Vec<u8>), // halo2 Com
 }
 
 impl From<TrinityCom> for SerializableTrinityCom {
@@ -98,7 +98,7 @@ impl From<TrinityCom> for SerializableTrinityCom {
                 SerializableTrinityCom::Plain(bytes)
             }
             TrinityCom::Halo2(halo2_com) => {
-                let bytes = bincode::serialize(&halo2_com).unwrap(); // works if you enabled serde
+                let bytes = bincode::serialize(&halo2_com).unwrap();
                 SerializableTrinityCom::Halo2(bytes)
             }
         }
@@ -185,7 +185,6 @@ impl TryFrom<SerializablePlainParams> for CommitmentKey<Bn254, Radix2EvaluationD
     type Error = &'static str;
 
     fn try_from(s: SerializablePlainParams) -> Result<Self, Self::Error> {
-        // Use CanonicalDeserialize
         CommitmentKey::deserialize_uncompressed(&mut &s.commitment_key_bytes[..])
             .map_err(|_| "Failed to deserialize CommitmentKey")
     }
@@ -194,10 +193,7 @@ impl TryFrom<SerializablePlainParams> for CommitmentKey<Bn254, Radix2EvaluationD
 impl TrinityParams {
     pub fn to_sender_params(&self) -> TrinitySenderParams {
         match self {
-            TrinityParams::Plain(ck) => {
-                // Just use the full commitment key for the Plain variant
-                TrinitySenderParams::Plain(ck.clone())
-            }
+            TrinityParams::Plain(ck) => TrinitySenderParams::Plain(ck.clone()),
             TrinityParams::Halo2(params) => {
                 // Extract LaconicParams from Halo2Params
                 // As the garbler doesn't need the full Halo2Params
@@ -398,12 +394,12 @@ impl<'a> TrinitySender<'a> {
         }
     }
 
-    pub fn new_from_params(params: LaconicParams, com: TrinityCom) -> Self {
-        match com {
-            TrinityCom::Plain(com) => todo!(),
-            TrinityCom::Halo2(com) => TrinitySender::Halo2(Halo2OTSender::new_from(params, com)),
-        }
-    }
+    // pub fn new_from_params(params: LaconicParams, com: TrinityCom) -> Self {
+    //     match com {
+    //         TrinityCom::Plain(com) => todo!(),
+    //         TrinityCom::Halo2(com) => TrinitySender::Halo2(Halo2OTSender::new_from(params, com)),
+    //     }
+    // }
 
     pub fn send<R: Rng>(
         &self,

@@ -59,7 +59,7 @@ pub struct Msg<E: Pairing> {
     pub h: [(E::G2Affine, [u8; MSG_SIZE]); 2],
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SerializableMsg {
     pub h: [(Vec<u8>, [u8; MSG_SIZE]); 2],
 }

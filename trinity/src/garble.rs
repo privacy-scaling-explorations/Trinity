@@ -2,15 +2,40 @@ use std::sync::Arc;
 
 use mpz_circuits::Circuit;
 use mpz_core::Block;
-use mpz_garble_core::{Delta, GarbledCircuit, Generator, GeneratorOutput, Key, Mac};
+use mpz_garble_core::{Delta, EncryptedGate, GarbledCircuit, Generator, GeneratorOutput, Key, Mac};
 use rand::{rngs::StdRng, Rng};
+use serde::{Deserialize, Serialize};
 
-use crate::commit::{Trinity, TrinityCom, TrinityMsg};
+use crate::{
+    commit::{Trinity, TrinityCom, TrinityMsg},
+    SerializableTrinityMsg,
+};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SerializableGarbledCircuit {
+    pub gates: Vec<EncryptedGate>, // Use the inner representation of GarbledCircuit
+}
+
+impl From<GarbledCircuit> for SerializableGarbledCircuit {
+    fn from(circuit: GarbledCircuit) -> Self {
+        Self {
+            gates: circuit.gates,
+        }
+    }
+}
+
+impl From<SerializableGarbledCircuit> for GarbledCircuit {
+    fn from(serializable: SerializableGarbledCircuit) -> Self {
+        Self {
+            gates: serializable.gates,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GarbledBundle {
-    pub ciphertexts: Vec<TrinityMsg>,
-    pub garbled_circuit: GarbledCircuit,
+    pub ciphertexts: Vec<SerializableTrinityMsg>,
+    pub garbled_circuit: SerializableGarbledCircuit,
     pub decoding_bits: Vec<bool>,
     pub all_input_macs: Vec<Mac>,
 }
@@ -65,6 +90,11 @@ pub fn generate_garbled_circuit(
         })
         .collect();
 
+    let serialized_ciphertexts: Vec<SerializableTrinityMsg> = ciphertexts
+        .iter()
+        .map(|msg| SerializableTrinityMsg::from(msg.clone()))
+        .collect();
+
     // Add placeholder MACs for evaluator inputs (these will be replaced during evaluation)
     for _ in 0..evaluator_input_size {
         all_input_macs.push(Mac::from(Block::ZERO));
@@ -81,7 +111,7 @@ pub fn generate_garbled_circuit(
         gates.extend(batch.into_array());
     }
 
-    let garbled_circuit = GarbledCircuit { gates };
+    let garbled_circuit = SerializableGarbledCircuit::from(GarbledCircuit { gates });
 
     let GeneratorOutput {
         outputs: output_keys,
@@ -92,7 +122,7 @@ pub fn generate_garbled_circuit(
     let decoding_bits: Vec<bool> = output_keys.iter().map(|key| key.pointer()).collect();
 
     GarbledBundle {
-        ciphertexts,
+        ciphertexts: serialized_ciphertexts,
         garbled_circuit,
         decoding_bits,
         all_input_macs,

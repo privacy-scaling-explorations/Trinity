@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use mpz_circuits::Circuit;
 use mpz_core::Block;
-use mpz_garble_core::{evaluate_garbled_circuits, EvaluatorOutput, Mac};
+use mpz_garble_core::{evaluate_garbled_circuits, EvaluatorOutput, GarbledCircuit, Mac};
 
 use itybity::FromBitIterator;
 
-use crate::commit::{TrinityChoice, TrinityCom};
-use crate::garble::GarbledBundle;
+use crate::commit::{TrinityChoice, TrinityCom, TrinityMsg};
+use crate::garble::{GarbledBundle, SerializableGarbledCircuit};
 use crate::ot::KZGOTReceiver;
 use crate::SetupParams;
 
@@ -58,10 +58,12 @@ pub fn evaluate_circuit(
 
     // Replace the placeholder MACs with real ones from OT
     for i in 0..evaluator_input_size {
-        let ciphertext = &garbler_bundle.ciphertexts[i];
+        let serialized_ciphertext = &garbler_bundle.ciphertexts[i];
+        let ciphertext = TrinityMsg::try_from(serialized_ciphertext.clone())
+            .expect("Error while converting ciphertext.");
 
         // Get MAC via OT
-        let decrypted = ot_receiver.trinity_receiver.recv(i, *ciphertext);
+        let decrypted = ot_receiver.trinity_receiver.recv(i, ciphertext);
         let block = Block::new(decrypted);
 
         // Replace the placeholder at the correct position
@@ -69,13 +71,12 @@ pub fn evaluate_circuit(
         all_input_macs[garbler_input_size + i] = Mac::from(block);
     }
 
+    let garbled_circuit: GarbledCircuit =
+        SerializableGarbledCircuit::from(garbler_bundle.garbled_circuit).into();
+
     // Evaluate the circuit with these input MACs
-    let outputs = evaluate_garbled_circuits(vec![(
-        circuit,
-        all_input_macs,
-        garbler_bundle.garbled_circuit,
-    )])
-    .unwrap();
+    let outputs =
+        evaluate_garbled_circuits(vec![(circuit, all_input_macs, garbled_circuit)]).unwrap();
 
     let EvaluatorOutput {
         outputs: output_macs,
