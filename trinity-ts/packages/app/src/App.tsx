@@ -19,6 +19,12 @@ type ComputationState =
   | "result_computed" // Computation complete
   | "error"; // Error state
 
+function booleanArrayToInteger(boolArray: Uint8Array): number {
+  return boolArray.reduce((acc, bit, index) => {
+    return acc + (bit ? 1 : 0) * Math.pow(2, index);
+  }, 0);
+}
+
 function App() {
   // State for the application
   const [trinity, setTrinity] = useState<TrinityModule | null>(null);
@@ -96,7 +102,7 @@ function App() {
 
     try {
       const garblerObj = trinity.TrinityGarbler(
-        evaluator.commitment,
+        evaluator.commitment_serialized,
         setup,
         intToUint8Array2(garblerInput),
         circuit
@@ -116,7 +122,9 @@ function App() {
 
     try {
       const computationResult = evaluator.evaluate(garbler, circuit);
-      setResult(computationResult);
+      console.log("Computation result:", computationResult);
+      const resultAsInteger = booleanArrayToInteger(computationResult);
+      setResult(resultAsInteger);
       setComputationState("result_computed");
     } catch (err) {
       setError((err as Error).toString());

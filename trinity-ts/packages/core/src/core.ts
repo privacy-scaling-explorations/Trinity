@@ -29,7 +29,7 @@ export interface TrinityModule {
   ) => TrinityEvaluator;
 
   TrinityGarbler: (
-    evaluator_commitment: WasmCommitment,
+    evaluator_commitment: string,
     setup: TrinityWasmSetup,
     garbler_input: Uint8Array,
     circuit: CircuitWrapper
@@ -84,7 +84,7 @@ export async function initTrinity(): Promise<TrinityModule> {
     },
 
     TrinityGarbler: function (
-      evaluator_commitment: WasmCommitment,
+      evaluator_commitment: string,
       setup: TrinityWasmSetup,
       garbler_input: Uint8Array,
       circuit: CircuitWrapper
