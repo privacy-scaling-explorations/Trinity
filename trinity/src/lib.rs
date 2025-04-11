@@ -111,6 +111,7 @@ impl TrinityWasmSetup {
         self.params.to_sender_bytes()
     }
 
+    #[wasm_bindgen(static_method_of = TrinityWasmSetup)]
     pub fn from_sender_setup(bytes: &[u8]) -> Result<TrinityWasmSetup, JsError> {
         let params = SetupParams::from_sender_bytes(bytes)
             .map_err(|_| JsError::new("Failed to deserialize sender parameters"))?;
@@ -233,6 +234,18 @@ impl TrinityGarbler {
 
         TrinityGarbler {
             bundle: serialized_bundle,
+        }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn bundle(&self) -> Vec<u8> {
+        self.bundle.clone()
+    }
+
+    #[wasm_bindgen(static_method_of = TrinityGarbler)]
+    pub fn from_bundle(bundle_bytes: &[u8]) -> TrinityGarbler {
+        TrinityGarbler {
+            bundle: bundle_bytes.to_vec(),
         }
     }
 }
