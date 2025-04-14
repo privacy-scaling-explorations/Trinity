@@ -2,19 +2,23 @@ use std::marker::PhantomData;
 
 use crate::{
     kzg_commitment_with_halo2_proof,
+    params::LaconicParams,
     poly_op::{eval_polynomial, poly_divide, serialize_cubic_ext_field},
     Halo2Params,
 };
-use halo2_backend::poly::{kzg::commitment::ParamsKZG, Coeff, Polynomial};
+use halo2_backend::poly::{Coeff, Polynomial};
 use halo2_middleware::zal::impls::PlonkEngineConfig;
 use halo2_proofs::{
     arithmetic::Field,
-    halo2curves::bn256::{Bn256, Fq, Fr, G1Affine, G2Affine, G1, G2},
-    halo2curves::ff_ext::{cubic::CubicExtField, quadratic::QuadExtField},
-    halo2curves::group::Curve,
-    halo2curves::pairing::Engine,
+    halo2curves::{
+        bn256::{Bn256, Fq, Fr, G1Affine, G2Affine, G1, G2},
+        ff_ext::{cubic::CubicExtField, quadratic::QuadExtField},
+        group::Curve,
+        pairing::Engine,
+    },
     poly::{
-        commitment::{Blind, ParamsProver},
+        commitment::{Blind, Params, ParamsProver},
+        kzg::commitment::ParamsKZG,
         EvaluationDomain,
     },
 };
@@ -42,30 +46,36 @@ pub struct Msg {
     pub h: [(G2Affine, [u8; MSG_SIZE]); 2],
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SerializableMsg {
     pub h: [(Vec<u8>, [u8; MSG_SIZE]); 2],
 }
 
-impl Msg {
-    pub fn serialize(&self) -> Vec<u8> {
-        let serializable = SerializableMsg {
-            h: self.h.map(|(g2, msg)| {
-                let g2_bytes = g2.to_raw_bytes(); // Vec<u8> with length 128
-                (g2_bytes, msg)
-            }),
-        };
-        serde_json::to_vec(&serializable).unwrap()
+// Implement From trait to convert Msg to SerializableMsg
+impl From<Msg> for SerializableMsg {
+    fn from(msg: Msg) -> Self {
+        SerializableMsg {
+            h: [
+                (msg.h[0].0.to_raw_bytes(), msg.h[0].1),
+                (msg.h[1].0.to_raw_bytes(), msg.h[1].1),
+            ],
+        }
     }
+}
 
-    pub fn deserialize(data: &[u8]) -> Self {
-        let serializable: SerializableMsg = serde_json::from_slice(data).unwrap();
-        let h = serializable.h.map(|(g2_bytes, msg)| {
-            assert_eq!(g2_bytes.len(), 128, "Invalid length for G2Affine");
-            let g2 = G2Affine::from_raw_bytes(&g2_bytes).expect("Deserialization failed");
-            (g2, msg)
-        });
-        Self { h }
+// Implement TryFrom trait to convert SerializableMsg to Msg
+impl TryFrom<SerializableMsg> for Msg {
+    type Error = &'static str;
+
+    fn try_from(s: SerializableMsg) -> Result<Self, Self::Error> {
+        let g2_0 =
+            G2Affine::from_raw_bytes(&s.h[0].0).ok_or("Failed to deserialize first G2Affine")?;
+        let g2_1 =
+            G2Affine::from_raw_bytes(&s.h[1].0).ok_or("Failed to deserialize second G2Affine")?;
+
+        Ok(Msg {
+            h: [(g2_0, s.h[0].1), (g2_1, s.h[1].1)],
+        })
     }
 }
 
@@ -103,7 +113,7 @@ pub struct LaconicOTRecv {
 
 #[derive(Debug, Clone)]
 pub struct LaconicOTSender {
-    params: ParamsKZG<Bn256>,
+    params: LaconicParams,
     com: Com,
     domain: EvaluationDomain<Fr>,
 }
@@ -223,7 +233,25 @@ fn decrypt<const N: usize>(pad: Gt, ct: &[u8; N]) -> [u8; N] {
 }
 
 impl LaconicOTSender {
-    pub fn new(params: ParamsKZG<Bn256>, com: Com, domain: EvaluationDomain<Fr>) -> Self {
+    pub fn new(_params: ParamsKZG<Bn256>, com: Com) -> Self {
+        let verifier_params = _params.verifier_params();
+        let domain = EvaluationDomain::new(1, verifier_params.k());
+        let params = LaconicParams {
+            k: verifier_params.k(),
+            g0: _params.g[0],
+            g2: _params.g2,
+            s_g2: _params.s_g2,
+        };
+
+        Self {
+            params,
+            com,
+            domain,
+        }
+    }
+
+    pub fn new_from(params: LaconicParams, com: Com) -> Self {
+        let domain = EvaluationDomain::new(1, params.k);
         Self {
             params,
             com,
@@ -242,7 +270,7 @@ impl LaconicOTSender {
         let r0 = Fr::random(&mut *rng);
         let r1 = Fr::random(&mut *rng);
 
-        let g1 = self.params.g[0];
+        let g1 = self.params.g0;
         let g2 = self.params.g2;
         let tau = self.params.s_g2;
 
@@ -282,14 +310,11 @@ fn test_laconic_ot() {
     let bitvector = [Choice::Zero, Choice::One, Choice::Zero, Choice::One];
 
     let halo2params = Halo2Params::setup(rng, degree).unwrap();
+    let laconic_params = LaconicParams::from(&halo2params);
 
     let receiver = LaconicOTRecv::new(halo2params, &bitvector);
 
-    let sender = LaconicOTSender::new(
-        receiver.halo2params.params.clone(),
-        receiver.commitment(),
-        receiver.halo2params.domain.clone(),
-    );
+    let sender = LaconicOTSender::new_from(laconic_params, receiver.commitment());
 
     let m0 = [0u8; MSG_SIZE];
     let m1 = [1u8; MSG_SIZE];
@@ -302,9 +327,11 @@ fn test_laconic_ot() {
 fn test_msg_halo2_serialization() {
     use halo2_proofs::halo2curves::bn256::G2Affine;
     use rand::rngs::OsRng;
+    use std::convert::{From, TryFrom};
 
     let rng = &mut OsRng;
 
+    // Create original message
     let original_msg = Msg {
         h: [
             (G2Affine::random(rng.clone()), [3u8; MSG_SIZE]),
@@ -312,11 +339,29 @@ fn test_msg_halo2_serialization() {
         ],
     };
 
-    let serialized = original_msg.serialize();
-    let deserialized_msg = Msg::deserialize(&serialized);
+    // Convert to serializable form
+    let serializable_msg = SerializableMsg::from(original_msg);
 
+    // Verify raw bytes are correct length
+    assert!(serializable_msg.h[0].0.len() > 0);
+    assert!(serializable_msg.h[1].0.len() > 0);
+
+    // Convert back to original type
+    let deserialized_msg = Msg::try_from(serializable_msg).expect("Deserialization failed");
+
+    // Verify everything matches
     assert_eq!(original_msg.h[0].1, deserialized_msg.h[0].1);
     assert_eq!(original_msg.h[1].1, deserialized_msg.h[1].1);
     assert_eq!(original_msg.h[0].0, deserialized_msg.h[0].0);
     assert_eq!(original_msg.h[1].0, deserialized_msg.h[1].0);
+
+    // Optional: For compatibility, verify we can still use bincode or serde_json if needed
+    let json_bytes = serde_json::to_vec(&SerializableMsg::from(original_msg))
+        .expect("JSON serialization failed");
+    let from_json = serde_json::from_slice::<SerializableMsg>(&json_bytes)
+        .expect("JSON deserialization failed");
+    let from_json_msg = Msg::try_from(from_json).expect("Conversion failed");
+
+    assert_eq!(original_msg.h[0].0, from_json_msg.h[0].0);
+    assert_eq!(original_msg.h[1].0, from_json_msg.h[1].0);
 }

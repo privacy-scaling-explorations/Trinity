@@ -90,4 +90,4 @@ pnpm dev         # Starts development server at http://localhost:5173
 
 ## Acknowledgments
 
-We would like to thank all contributors, researchers, and supporters who have helped make Trinity possible. Special thanks to Vivek and the Cursive team for originally imagining the scheme, the research team behind the Laconic OT paper and their implementation, and Nakul for his help in integrating secure garbling. Additionally, we extend our gratitude to the authors of the mpz garbling framework and the PSE Halo2 team for their foundational work and inspiration.
+We would like to thank all contributors, researchers, and supporters who have helped make Trinity possible. Special thanks to @RiverRuby and the [Cursive team](https://github.com/cursive-team) for originally designing the scheme, the research team behind the Laconic OT paper and their implementation. Thanks Nakul and Breachy for their help in integrating secure garbling and Halo2 LOT. Additionally, we extend our gratitude to the authors of the mpz garbling framework and the PSE Halo2 team for their foundational work and inspiration.

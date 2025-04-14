@@ -139,7 +139,6 @@ pub fn kzg_commitment_with_halo2_proof(
 
     // Finalize and serialize the proof
     let proof = proof_transcript.finalize();
-    println!("Proof created successfully!");
 
     // Verify the proof
     let mut verifier_transcript =
@@ -162,10 +161,6 @@ pub fn kzg_commitment_with_halo2_proof(
 
     // Extract the bitvector as advice column commitment from Halo2 proof
     let halo2_commitment = commitments[0];
-    println!(
-        "Halo2 Commitment to the bitvector column: {:?}",
-        halo2_commitment
-    );
 
     Ok(CircuitOutput {
         commitment: halo2_commitment,

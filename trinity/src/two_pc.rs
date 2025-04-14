@@ -22,6 +22,20 @@ pub struct SetupParams {
     pub trinity: Arc<Trinity>,
 }
 
+impl SetupParams {
+    pub fn from_sender_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+        let trinity = Trinity::from_sender_bytes(bytes)?;
+        let arc_trinity = Arc::new(trinity);
+        Ok(Self {
+            trinity: arc_trinity,
+        })
+    }
+
+    pub fn to_sender_bytes(&self) -> Vec<u8> {
+        self.trinity.to_sender_bytes()
+    }
+}
+
 pub fn setup(mode: KZGType) -> SetupParams {
     let trinity = Arc::new(Trinity::setup(mode, MSG_SIZE));
 
@@ -66,6 +80,7 @@ mod tests {
         )
         .unwrap();
         let setup_bundle = setup(KZGType::Plain);
+        let trinity = setup_bundle.clone().trinity;
 
         let garbler_input = [6u16];
         let garbler_bits = garbler_input.into_iter_lsb0().collect::<Vec<bool>>();
@@ -84,7 +99,7 @@ mod tests {
             garbler_bits,
             &mut rng,
             delta,
-            &setup_bundle,
+            &trinity,
             evaluator_commitment.receiver_commitment,
         );
 
@@ -113,6 +128,7 @@ mod tests {
         )
         .unwrap();
         let setup_bundle = setup(KZGType::Halo2);
+        let trinity = setup_bundle.clone().trinity;
 
         let garbler_input = [6u16];
         let garbler_bits = garbler_input.into_iter_lsb0().collect::<Vec<bool>>();
@@ -131,7 +147,7 @@ mod tests {
             garbler_bits,
             &mut rng,
             delta,
-            &setup_bundle,
+            &trinity,
             evaluator_commitment.receiver_commitment,
         );
 
