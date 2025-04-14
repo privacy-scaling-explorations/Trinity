@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build:wasm": "cd ../../.. && wasm-pack build --target web -d trinity-ts/packages/core/src/wasm trinity",
+    "build:wasm": "cd ../../.. && pnpm exec wasm-pack build --target web -d trinity-ts/packages/core/src/wasm trinity",
     "build:core": "pnpm --filter @trinity/core build",
     "build:app": "pnpm --filter @trinity/app build",
     "build": "pnpm build:wasm && pnpm build:core && pnpm build:app",
