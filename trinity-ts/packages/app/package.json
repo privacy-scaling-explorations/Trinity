@@ -1,17 +1,17 @@
 {
-  "name": "@trinity_2pc/app",
+  "name": "@trinity-2pc/app",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build:wasm": "cd ../../.. && wasm-pack build --target web -d trinity-ts/packages/core/src/wasm trinity",
+    "build:wasm": "pnpm exec wasm-pack build --target web -d ../core/src/wasm ../../../trinity",
     "build:core": "pnpm --filter @trinity/core build",
-    "build:app": "pnpm --filter @trinity/app build",
+    "build:app": "vite build",
     "build": "pnpm build:wasm && pnpm build:core && pnpm build:app",
     "dev": "vite"
   },
   "dependencies": {
-    "@trinity/core": "workspace:*",
+    "@trinity_2pc/core": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -26,6 +26,7 @@
     "globals": "^15.15.0",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "wasm-pack": "^0.13.1"
   }
 }

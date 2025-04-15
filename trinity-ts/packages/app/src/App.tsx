@@ -6,7 +6,7 @@ import {
   TrinityWasmSetup,
   TrinityEvaluator,
   TrinityGarbler,
-} from "@trinity/core";
+} from "@trinity_2pc/core";
 import { useState, useEffect } from "react";
 import "./App.css";
 
