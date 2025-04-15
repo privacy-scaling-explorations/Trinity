@@ -9,7 +9,12 @@ import init_wasm, {
 
 let isInitialized = false;
 
-export { TrinityWasmSetup, TrinityEvaluator, TrinityGarbler, parse_circuit };
+export {
+  TrinityWasmSetup,
+  TrinityEvaluator,
+  TrinityGarbler,
+  parse_circuit as parseCircuit,
+};
 
 export type { CircuitWrapper, WasmCommitment };
 

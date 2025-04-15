@@ -1,5 +1,5 @@
 {
-  "name": "@trinity_2pc/core",
+  "name": "@trinity-2pc/core",
   "version": "0.1.0",
   "description": "TypeScript bindings for Trinity 2PC protocol",
   "main": "dist/index.js",
