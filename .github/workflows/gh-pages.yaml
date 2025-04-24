@@ -19,10 +19,10 @@ jobs:
 
       - name: Build book
         run: mdbook build
-        working-directory: ./trinity/doc
+        working-directory: ./doc
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./trinity/doc/book
+          publish_dir: ./doc/book
