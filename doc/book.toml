@@ -1,0 +1,13 @@
+[book]
+authors = ["Meyanis95"]
+language = "en"
+multilingual = false
+src = "src"
+title = "trinity-doc"
+
+[preprocessor.katex]
+after = ["links"]
+
+[output.html.katex]
+enable = true
+auto_render = true
