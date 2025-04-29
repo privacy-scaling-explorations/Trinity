@@ -88,6 +88,8 @@ pnpm install
 pnpm dev         # Starts development server at http://localhost:5173
 ```
 
+You can refer to the [mpc-hello](https://github.com/voltrevo/mpc-hello) repository for an end-to-end integration example.
+
 ## Acknowledgments
 
 We would like to thank all contributors, researchers, and supporters who have helped make Trinity possible. Special thanks to [Vivek](https://github.com/RiverRuby) and the [Cursive team](https://github.com/cursive-team) for originally designing the scheme, the research team behind the [Laconic OT paper and their implementation](https://github.com/rot256/research-we-kzg). Thanks [Nakul](https://github.com/nakkstar123) and [brech1](https://github.com/brech1) for their help in integrating secure garbling and Halo2 LOT. Additionally, we extend our gratitude to the authors of the [mpz](https://github.com/privacy-scaling-explorations/mpz) library and the [PSE Halo2](https://github.com/privacy-scaling-explorations/halo2) team for their foundational work and inspiration.
