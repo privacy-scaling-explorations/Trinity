@@ -1,9 +1,10 @@
-use std::marker::PhantomData;
+use std::io::Write;
+use std::marker::PhantomData; // Add this import to bring the `Write` trait into scope
 
 use crate::{
     kzg_commitment_with_halo2_proof,
     params::LaconicParams,
-    poly_op::{eval_polynomial, poly_divide, serialize_cubic_ext_field},
+    poly_op::{eval_polynomial, kzg_open, poly_divide, serialize_cubic_ext_field},
     Halo2Params,
 };
 use halo2_backend::poly::{Coeff, Polynomial};
@@ -120,6 +121,10 @@ pub struct LaconicOTSender {
 
 impl LaconicOTRecv {
     pub fn new(halo2params: Halo2Params, bits: &[Choice]) -> Self {
+        let start_time = std::time::Instant::now();
+
+        // Measure time for element preparation
+        let prep_start = std::time::Instant::now();
         let elems: Vec<_> = bits
             .iter()
             .map(|b| {
@@ -130,62 +135,48 @@ impl LaconicOTRecv {
                 }
             })
             .collect();
+        let prep_duration = prep_start.elapsed();
+        println!("Element preparation took: {:?}", prep_duration);
+        std::io::stdout().flush().unwrap();
 
-        // pad with random elements, comment out for now
-        // assert!(elems.len() <= ck.domain.size());
-        // elems.resize_with(ck.domain.size(), || {
-        //     E::ScalarField::rand(&mut ark_std::test_rng())
-        // });
-
+        // Measure time for KZG commitment with Halo2 proof
+        let kzg_start = std::time::Instant::now();
         let circuit_params = halo2params.params.clone();
         let circuit_output =
             kzg_commitment_with_halo2_proof(circuit_params, elems.clone()).unwrap();
+        let kzg_duration = kzg_start.elapsed();
+        println!("KZG commitment with Halo2 proof took: {:?}", kzg_duration);
+        std::io::stdout().flush().unwrap();
 
-        // Compute the commitment using `ParamsKZG`'s `commit_lagrange` function,
-        // with default blinding factor and Plonk engine
-        let engine = PlonkEngineConfig::build_default::<G1Affine>();
+        // Measure time for polynomial conversion
+        let poly_start = std::time::Instant::now();
+        let poly_duration = poly_start.elapsed();
+        println!("Polynomial conversion took: {:?}", poly_duration);
+        std::io::stdout().flush().unwrap();
 
-        let mut a = halo2params.domain.empty_lagrange();
-        for (i, a) in a.iter_mut().enumerate() {
-            if i < elems.len() {
-                *a = elems[i];
-            } else {
-                *a = Fr::zero();
-            }
-        }
-
-        // Convert polynomial f from Lagrange to coefficient form.
-        let poly_coeff = halo2params.domain.lagrange_to_coeff(a.clone());
-
-        // Get domain points
+        // Measure time for domain point computation
+        let domain_start = std::time::Instant::now();
         let n = elems.len();
         let points: Vec<Fr> = (0..n)
             .map(|i| halo2params.domain.get_omega().pow(&[i as u64]))
             .collect();
+        let domain_duration = domain_start.elapsed();
+        println!("Domain point computation took: {:?}", domain_duration);
+        std::io::stdout().flush().unwrap();
 
-        // Openings at the points
+        // Measure time for openings at the points
+        let openings_start = std::time::Instant::now();
         let qs: Vec<G1> = points
             .iter()
-            .map(|&z| {
-                // Evaluate f at z.
-                let f_z = eval_polynomial(&poly_coeff.values, z);
-
-                // Compute quotient q(x) = (f(x) - f(z)) / (x - z).
-                let quotient: Vec<Fr> = poly_divide(&poly_coeff.values, z, f_z);
-                let quotient_poly = Polynomial {
-                    values: quotient,
-                    _marker: PhantomData::<Coeff>,
-                };
-
-                let alpha = Blind::default();
-
-                // Commit to the quotient polynomial (in coefficient form).
-                let point = halo2params
-                    .params
-                    .commit(&engine.msm_backend, &quotient_poly, alpha);
-                point
-            })
+            .map(|&z| kzg_open(z, halo2params.clone(), elems.clone()))
             .collect();
+        let openings_duration = openings_start.elapsed();
+        println!("Openings at the points took: {:?}", openings_duration);
+        std::io::stdout().flush().unwrap();
+
+        let total_duration = start_time.elapsed();
+        println!("Total process took: {:?}", total_duration);
+        std::io::stdout().flush().unwrap();
 
         Self {
             qs,
@@ -364,4 +355,153 @@ fn test_msg_halo2_serialization() {
 
     assert_eq!(original_msg.h[0].0, from_json_msg.h[0].0);
     assert_eq!(original_msg.h[1].0, from_json_msg.h[1].0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::{rngs::OsRng, Rng};
+    use std::io::{self, Write};
+    use std::time::Instant;
+
+    fn generate_bitvector(size: usize) -> Vec<Choice> {
+        let mut rng = OsRng;
+        (0..size)
+            .map(|_| {
+                if rng.gen::<bool>() {
+                    Choice::One
+                } else {
+                    Choice::Zero
+                }
+            })
+            .collect()
+    }
+
+    fn bitvector_to_fr(bitvector: &[Choice]) -> Vec<Fr> {
+        bitvector
+            .iter()
+            .map(|b| {
+                if *b == Choice::One {
+                    Fr::from(1)
+                } else {
+                    Fr::from(0)
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_laconic_ot_recv_new_performance() {
+        let degree = 8;
+        let size = 1 << degree;
+
+        // Setup
+        let bitvector = generate_bitvector(size - 10);
+        let elems = bitvector_to_fr(&bitvector);
+        let halo2params = Halo2Params::setup(&mut OsRng, degree).unwrap();
+        let engine = PlonkEngineConfig::build_default::<G1Affine>();
+
+        let start_time = Instant::now();
+
+        // Polynomial prep
+        let prep_start = Instant::now();
+        println!("Element preparation took: {:?}", prep_start.elapsed());
+
+        // KZG commitment with Halo2 proof
+        let kzg_start = Instant::now();
+        let circuit_params = halo2params.params.clone();
+        let _circuit_output =
+            kzg_commitment_with_halo2_proof(circuit_params, elems.clone()).unwrap();
+        println!(
+            "KZG commitment with Halo2 proof took: {:?}",
+            kzg_start.elapsed()
+        );
+
+        // Polynomial conversion
+        let poly_start = Instant::now();
+        let mut lagrange = halo2params.domain.empty_lagrange();
+        for (i, val) in elems.iter().enumerate() {
+            lagrange[i] = *val;
+        }
+        let poly_coeff = halo2params.domain.lagrange_to_coeff(lagrange);
+        println!("Polynomial conversion took: {:?}", poly_start.elapsed());
+
+        // Domain point computation
+        let domain_start = Instant::now();
+        let points: Vec<Fr> = (0..elems.len())
+            .map(|i| halo2params.domain.get_omega().pow(&[i as u64]))
+            .collect();
+        println!(
+            "Domain point computation took: {:?}",
+            domain_start.elapsed()
+        );
+
+        // Openings
+        let openings_start = Instant::now();
+        let qs: Vec<G1> = points
+            .iter()
+            .map(|&z| {
+                let f_z = eval_polynomial(&poly_coeff.values, z);
+                let quotient = poly_divide(&poly_coeff.values, z, f_z);
+                let quotient_poly = Polynomial {
+                    values: quotient,
+                    _marker: PhantomData::<Coeff>,
+                };
+                let alpha = Blind::default();
+                halo2params
+                    .params
+                    .commit(&engine.msm_backend, &quotient_poly, alpha)
+            })
+            .collect();
+        println!(
+            "Openings at the points took: {:?}",
+            openings_start.elapsed()
+        );
+
+        println!(
+            "LaconicOTRecv::new execution time: {:?}",
+            start_time.elapsed()
+        );
+
+        assert!(!qs.is_empty());
+        io::stdout().flush().unwrap();
+    }
+
+    #[test]
+    fn test_laconic_ot_recv_all_openings_fk_performance() {
+        let degree = 8;
+        let size = 1 << degree;
+
+        println!("Testing LaconicOTRecv::all_openings_fk with size: {}", size);
+
+        // Setup
+        let bitvector = generate_bitvector(size);
+        let elems = bitvector_to_fr(&bitvector);
+        let halo2params = Halo2Params::setup(&mut OsRng, degree).unwrap();
+
+        let start_time = Instant::now();
+
+        // Polynomial prep
+        let prep_start = Instant::now();
+        println!("Element preparation took: {:?}", prep_start.elapsed());
+
+        // Precomputation
+        let precompute_start = Instant::now();
+        let powers = &halo2params.params.g[..size];
+        let y = crate::poly_op::precompute_y(powers, &halo2params.domain);
+        println!("precompute took: {:?}", precompute_start.elapsed());
+
+        // FK-style all-openings
+        let fk_start = Instant::now();
+        let fk_qs = crate::poly_op::all_openings_fk(&y, &halo2params.domain, &elems);
+        println!("all_openings_fk openings took: {:?}", fk_start.elapsed());
+
+        println!(
+            "LaconicOTRecv::all_openings_fk execution time: {:?}",
+            start_time.elapsed()
+        );
+
+        assert_eq!(fk_qs.len(), size);
+        io::stdout().flush().unwrap();
+    }
 }
