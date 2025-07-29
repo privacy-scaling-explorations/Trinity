@@ -5,11 +5,14 @@ use halo2curves::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::poly_op::precompute_y;
+
 #[derive(Debug, Clone)]
 pub struct Halo2Params {
     pub k: usize,
     pub domain: EvaluationDomain<Fr>,
     pub params: ParamsKZG<Bn256>,
+    pub precomputed_y: Vec<G1Affine>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -25,7 +28,16 @@ impl Halo2Params {
         let params: ParamsKZG<Bn256> = ParamsKZG::setup(k as u32, rng);
         let domain = EvaluationDomain::new(1, k as u32);
 
-        Ok(Halo2Params { k, domain, params })
+        let size = 1 << k;
+        let powers = &params.g[..size];
+        let precomputed_y = precompute_y(powers, &domain);
+
+        Ok(Halo2Params {
+            k,
+            domain,
+            params,
+            precomputed_y,
+        })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

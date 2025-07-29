@@ -158,7 +158,7 @@ pub fn all_openings_fk(
     y: &[G1Affine],
     domain: &halo2_proofs::poly::EvaluationDomain<Fr>,
     evals: &[Fr],
-) -> Vec<G1Affine> {
+) -> Vec<G1> {
     let domain_size = 1 << domain.k();
     let d = domain_size - 1;
 
@@ -204,5 +204,6 @@ pub fn all_openings_fk(
     let mut u_affine = vec![G1Affine::identity(); domain_size];
     G1::batch_normalize(&u[..domain_size], &mut u_affine);
 
-    u_affine
+    // Convert to projective (G1) and return
+    u_affine.iter().map(|p| G1::from(*p)).collect()
 }

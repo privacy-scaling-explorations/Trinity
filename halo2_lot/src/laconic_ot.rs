@@ -1,14 +1,9 @@
 use std::io::Write;
-use std::marker::PhantomData; // Add this import to bring the `Write` trait into scope
 
 use crate::{
-    kzg_commitment_with_halo2_proof,
-    params::LaconicParams,
-    poly_op::{eval_polynomial, kzg_open, poly_divide, serialize_cubic_ext_field},
+    kzg_commitment_with_halo2_proof, params::LaconicParams, poly_op::serialize_cubic_ext_field,
     Halo2Params,
 };
-use halo2_backend::poly::{Coeff, Polynomial};
-use halo2_middleware::zal::impls::PlonkEngineConfig;
 use halo2_proofs::{
     arithmetic::Field,
     halo2curves::{
@@ -17,11 +12,7 @@ use halo2_proofs::{
         group::Curve,
         pairing::Engine,
     },
-    poly::{
-        commitment::{Blind, Params, ParamsProver},
-        kzg::commitment::ParamsKZG,
-        EvaluationDomain,
-    },
+    poly::{commitment::Params, kzg::commitment::ParamsKZG, EvaluationDomain},
 };
 use halo2curves::{bn256::Gt, serde::SerdeObject};
 use rand::Rng;
@@ -156,20 +147,21 @@ impl LaconicOTRecv {
 
         // Measure time for domain point computation
         let domain_start = std::time::Instant::now();
-        let n = elems.len();
-        let points: Vec<Fr> = (0..n)
-            .map(|i| halo2params.domain.get_omega().pow(&[i as u64]))
-            .collect();
         let domain_duration = domain_start.elapsed();
         println!("Domain point computation took: {:?}", domain_duration);
         std::io::stdout().flush().unwrap();
 
         // Measure time for openings at the points
         let openings_start = std::time::Instant::now();
-        let qs: Vec<G1> = points
-            .iter()
-            .map(|&z| kzg_open(z, halo2params.clone(), elems.clone()))
-            .collect();
+        let qs = crate::poly_op::all_openings_fk(
+            &halo2params.precomputed_y,
+            &halo2params.domain,
+            &elems,
+        );
+        // let qs: Vec<G1> = points
+        //     .iter()
+        //     .map(|&z| kzg_open(z, halo2params.clone(), elems.clone()))
+        //     .collect();
         let openings_duration = openings_start.elapsed();
         println!("Openings at the points took: {:?}", openings_duration);
         std::io::stdout().flush().unwrap();
@@ -360,8 +352,22 @@ fn test_msg_halo2_serialization() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        kzg_commitment_with_halo2_proof,
+        poly_op::{eval_polynomial, poly_divide},
+        Halo2Params,
+    };
+
+    use halo2_backend::poly::{Coeff, Polynomial};
+    use halo2_middleware::zal::impls::PlonkEngineConfig;
+    use halo2_proofs::{
+        arithmetic::Field,
+        halo2curves::bn256::{Fr, G1Affine, G1},
+        poly::commitment::{Blind, ParamsProver},
+    };
     use rand::{rngs::OsRng, Rng};
     use std::io::{self, Write};
+    use std::marker::PhantomData; // Add this import to bring the `Write` trait into scope
     use std::time::Instant;
 
     fn generate_bitvector(size: usize) -> Vec<Choice> {
@@ -391,7 +397,7 @@ mod tests {
     }
 
     #[test]
-    fn test_laconic_ot_recv_new_performance() {
+    fn test_laconic_ot_recv_single_open() {
         let degree = 8;
         let size = 1 << degree;
 
@@ -468,7 +474,7 @@ mod tests {
     }
 
     #[test]
-    fn test_laconic_ot_recv_all_openings_fk_performance() {
+    fn test_laconic_ot_recv_fk_openings() {
         let degree = 8;
         let size = 1 << degree;
 
