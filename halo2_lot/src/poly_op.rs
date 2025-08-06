@@ -15,7 +15,6 @@ use halo2curves::{
     fft::best_fft,
     group::{cofactor::CofactorCurveAffine, Curve, Group},
 };
-use std::ops::Mul;
 
 use crate::Halo2Params;
 
@@ -129,9 +128,16 @@ pub fn precompute_y(
     let domain2 = EvaluationDomain::new(1, domain.k() + 1);
     let domain2_size = 1 << domain2.k();
 
+    assert_eq!(domain2_size, 2 * d + 2, "domain2 size must equal 2d + 2");
+    assert!(
+        powers.len() >= d,
+        "Powers must contain at least d elements, got {}",
+        powers.len()
+    );
+
     // Construct hat_s = [powers[d-1],...,powers[0], d+2 zeros]
     let mut hat_s = vec![G1::identity(); domain2_size];
-    for (i, p) in powers[..d].iter().rev().enumerate() {
+    for (i, p) in powers[..=d].iter().rev().enumerate() {
         hat_s[i] = (*p).into();
     }
 
@@ -158,12 +164,28 @@ pub fn all_openings_fk(
     y: &[G1Affine],
     domain: &halo2_proofs::poly::EvaluationDomain<Fr>,
     evals: &[Fr],
-) -> Vec<G1> {
+) -> Result<Vec<G1>, String> {
     let domain_size = 1 << domain.k();
     let d = domain_size - 1;
 
     let domain2 = EvaluationDomain::new(1, domain.k() + 1);
     let domain2_size = 1 << domain2.k();
+
+    assert_eq!(
+        evals.len(),
+        domain_size,
+        "Error: evals length ({}) != domain size ({})",
+        evals.len(),
+        domain_size
+    );
+
+    assert_eq!(
+        y.len(),
+        domain2_size,
+        "Error: precomputed y length ({}) != domain2 size ({})",
+        y.len(),
+        domain2_size
+    );
 
     // Step 1: Convert evals to coefficients
     let mut coeffs = evals.to_vec();
@@ -171,6 +193,8 @@ pub fn all_openings_fk(
     coeffs
         .iter_mut()
         .for_each(|c| *c *= domain.get_ifft_divisor());
+
+    assert_eq!(coeffs.len(), d + 1, "coeffs should be of length d+1");
 
     // Step 2: Construct hat_c
     let mut hat_c = vec![Fr::zero(); domain2_size];
@@ -205,5 +229,39 @@ pub fn all_openings_fk(
     G1::batch_normalize(&u[..domain_size], &mut u_affine);
 
     // Convert to projective (G1) and return
-    u_affine.iter().map(|p| G1::from(*p)).collect()
+    Ok(u_affine.iter().map(|p| G1::from(*p)).collect())
+}
+
+/// Compare FK20 openings with direct KZG openings
+pub fn compare_fk_vs_kzg(halo2params: &Halo2Params, elems: &[Fr]) -> Result<(), String> {
+    let domain = &halo2params.domain;
+    let domain_size = 1 << domain.k();
+
+    // Padding
+    let mut padded = elems.to_vec();
+    if padded.len() < domain_size {
+        padded.resize(domain_size, Fr::zero());
+    }
+
+    // Compute FK openings
+    let fk_openings = all_openings_fk(&halo2params.precomputed_y, domain, &padded)?;
+
+    // Compare with direct KZG openings
+    for i in 0..domain_size {
+        let z_i = domain.get_extended_omega().pow_vartime([i as u64]);
+
+        let kzg = kzg_open(z_i, halo2params.clone(), padded.clone());
+        let fk = fk_openings[i];
+
+        if kzg != fk {
+            println!(
+                "Mismatch at i = {}: \n  kzg = {:?}\n  fk  = {:?}",
+                i, kzg, fk
+            );
+            return Err(format!("Mismatch at i = {}", i));
+        }
+    }
+
+    println!("✅ FK and KZG openings match at all points.");
+    Ok(())
 }

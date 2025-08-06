@@ -19,6 +19,8 @@ use two_pc::{setup, u8_vec_to_vec_bool, SetupParams};
 
 use wasm_bindgen::prelude::*;
 
+use crate::commit::{TrinityInnerParams, TrinityParams};
+
 /// Parse a circuit from a string
 #[wasm_bindgen]
 pub fn parse_circuit(
@@ -116,6 +118,35 @@ impl TrinityWasmSetup {
         let params = SetupParams::from_sender_bytes(bytes)
             .map_err(|_| JsError::new("Failed to deserialize sender parameters"))?;
         Ok(TrinityWasmSetup { params })
+    }
+
+    /// Serializes the full setup parameters to bytes.
+    pub fn to_full_params_bytes(&self) -> Vec<u8> {
+        self.params.to_full_params_bytes()
+    }
+
+    /// Deserializes the full setup parameters from bytes.
+    #[wasm_bindgen(static_method_of = TrinityWasmSetup)]
+    pub fn from_full_params_bytes(bytes: &[u8]) -> Result<TrinityWasmSetup, JsError> {
+        let params = SetupParams::from_full_params_bytes(bytes)
+            .map_err(|e| JsError::new(&format!("Failed to deserialize full parameters: {}", e)))?;
+        Ok(TrinityWasmSetup { params })
+    }
+
+    #[wasm_bindgen]
+    pub fn inspect(&self) -> String {
+        #[cfg(target_arch = "wasm32")]
+        console_error_panic_hook::set_once();
+
+        match &self.params.trinity.params {
+            TrinityInnerParams::Full(params) => match params {
+                TrinityParams::Plain(p) => {
+                    format!("Plain setup with domain size: {}", p.domain.size)
+                }
+                TrinityParams::Halo2(p) => format!("Halo2 setup with k = {}", p.k),
+            },
+            TrinityInnerParams::Sender(_) => "Sender-only parameters".to_string(),
+        }
     }
 }
 
@@ -348,7 +379,7 @@ mod tests {
 
         // === EVALUATOR SETUP (SERVER) ===
         // Create full Trinity setup
-        let evaluator_trinity = Trinity::setup(KZGType::Plain, 16);
+        let evaluator_trinity = Trinity::setup(KZGType::Halo2, 16);
 
         // Create OT receiver and commitment
         let ot_receiver = evaluator_trinity
@@ -401,5 +432,43 @@ mod tests {
 
         // Verify result
         assert_eq!(result, u16_vec_to_vec_bool(expected.to_vec()));
+    }
+
+    #[test]
+    fn test_wasm_evaluator_creation_with_serialization_halo2() {
+        // 1. Load the pre-generated `halo2params.bin` file from disk.
+        println!("Loading halo2params.bin from disk...");
+        let path = "./halo2params.bin";
+        let setup_bytes = std::fs::read(path).expect(&format!(
+            "Failed to read params file at '{}'. Make sure to run `cargo run --release --bin generate_params` first.",
+            path
+        ));
+        println!("Loaded {} bytes from params file.", setup_bytes.len());
+
+        // 2. Deserialize the bytes into a setup object.
+        println!("Deserializing setup from bytes...");
+        let deserialized_setup = TrinityWasmSetup::from_full_params_bytes(&setup_bytes)
+            .expect("Deserialization of setup bytes failed!");
+        println!("Deserialization complete.");
+        println!(
+            "Inspecting loaded setup object: {}",
+            deserialized_setup.inspect()
+        );
+
+        // 3. Use the DESERIALIZED setup object to create the evaluator.
+        let evaluator_input: Vec<u8> = vec![16, 0];
+        println!("Using evaluator input: {:?}", evaluator_input);
+
+        let result = std::panic::catch_unwind(|| {
+            println!("Calling TrinityEvaluator::new with deserialized setup...");
+            let _evaluator = TrinityEvaluator::new(&deserialized_setup, evaluator_input);
+            println!("TrinityEvaluator created successfully with deserialized setup.");
+        });
+
+        // 4. Assert that the constructor did not panic.
+        assert!(
+            result.is_ok(),
+            "TrinityEvaluator::new panicked with deserialized setup!"
+        );
     }
 }

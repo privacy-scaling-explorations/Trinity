@@ -216,10 +216,8 @@ impl Trinity {
                 TrinityParams::Plain(Arc::new(plainparams))
             }
             KZGType::Halo2 => {
-                // To Do: Have cleaner way to transpose message_length to degree for Halo2
-                let degree = message_length;
-                let halo2params =
-                    Halo2Params::setup(rng, degree).expect("Failed to setup Halo2Params");
+                // To do: remove hardcoded k parameter
+                let halo2params = Halo2Params::setup(rng, 5).expect("Failed to setup Halo2Params");
                 TrinityParams::Halo2(Arc::new(halo2params))
             }
         };
@@ -239,6 +237,62 @@ impl Trinity {
         Self {
             mode,
             params: TrinityInnerParams::Sender(sender_params),
+        }
+    }
+
+    // Create Trinity from full parameter bytes
+    pub fn from_full_params_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+        if bytes.is_empty() {
+            return Err("Empty bytes");
+        }
+
+        let mode = match bytes[0] {
+            0 => KZGType::Plain,
+            1 => KZGType::Halo2,
+            _ => return Err("Invalid tag byte"),
+        };
+
+        let params = match mode {
+            KZGType::Plain => {
+                let ck = CommitmentKey::deserialize_uncompressed(&mut &bytes[1..])
+                    .map_err(|_| "Failed to deserialize CommitmentKey")?;
+                TrinityParams::Plain(Arc::new(ck))
+            }
+            KZGType::Halo2 => {
+                let halo2_params = Halo2Params::from_bytes(&bytes[1..])
+                    .map_err(|_| "Failed to convert from SerializableHalo2Params")?;
+                TrinityParams::Halo2(Arc::new(halo2_params))
+            }
+        };
+
+        Ok(Self {
+            mode,
+            params: TrinityInnerParams::Full(params),
+        })
+    }
+
+    // Serialize full params to bytes
+    pub fn to_full_params_bytes(&self) -> Vec<u8> {
+        match &self.params {
+            TrinityInnerParams::Full(full_params) => match full_params {
+                TrinityParams::Plain(ck) => {
+                    let mut bytes = vec![0]; // Tag for Plain
+                    let mut param_bytes = Vec::new();
+                    ck.serialize_uncompressed(&mut param_bytes)
+                        .expect("Serialization failed");
+                    bytes.append(&mut param_bytes);
+                    bytes
+                }
+                TrinityParams::Halo2(halo2_params) => {
+                    let mut bytes = vec![1]; // Tag for Halo2
+                    let mut param_bytes = Halo2Params::to_bytes(halo2_params.as_ref());
+                    bytes.append(&mut param_bytes);
+                    bytes
+                }
+            },
+            TrinityInnerParams::Sender(_) => {
+                panic!("Cannot serialize full params from sender-only params")
+            }
         }
     }
 
@@ -355,11 +409,10 @@ impl<'a> TrinityReceiver<'a> {
                 TrinityReceiver::Plain(plain_recv)
             }
             TrinityParams::Halo2(halo2_params_arc) => {
-                let halo2_bits: Vec<halo2_we_kzg::Choice> = bits
-                    .iter()
-                    .map(|&b| TrinityChoice::from(b).into())
-                    .collect();
-                let halo2_recv = Halo2OTRecv::new((halo2_params_arc.as_ref()).clone(), &halo2_bits);
+                let halo2_bits: Vec<halo2_we_kzg::Choice> =
+                    bits.iter().map(|&b| b.into()).collect();
+                let halo2_params = halo2_params_arc.as_ref();
+                let halo2_recv = Halo2OTRecv::new(halo2_params.clone(), &halo2_bits);
                 TrinityReceiver::Halo2(halo2_recv)
             }
         }

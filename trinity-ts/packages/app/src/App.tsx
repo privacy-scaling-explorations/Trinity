@@ -7,7 +7,7 @@ import {
   TrinityEvaluator,
   TrinityGarbler,
 } from "@trinity_2pc/core";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./App.css";
 
 // Define the computation states
@@ -40,16 +40,21 @@ function App() {
   const [setup, setSetup] = useState<TrinityWasmSetup | null>(null);
   const [evaluator, setEvaluator] = useState<TrinityEvaluator | null>(null);
   const [garbler, setGarbler] = useState<TrinityGarbler | null>(null);
+  const timings = useRef<Record<string, number>>({});
 
   // Initialize Trinity and load circuit
   useEffect(() => {
     async function setup() {
       try {
+        const t0 = performance.now();
         // Initialize Trinity
         const trinity = await initTrinity();
+        const t1 = performance.now();
+        timings.current["Import WASM module"] = t1 - t0;
         setTrinity(trinity);
 
         // Load circuit
+        const t2 = performance.now();
         const circuitResponse = await fetch("/simple_16bit_add.txt");
         if (!circuitResponse.ok) {
           throw new Error(
@@ -57,13 +62,32 @@ function App() {
           );
         }
         const circuitText = await circuitResponse.text();
+        const t3 = performance.now();
+        timings.current["Load circuit file"] = t3 - t2;
 
         // Parse circuit (assuming parse_circuit is available)
+        const t4 = performance.now();
         const parsedCircuit = trinity.parseCircuit(circuitText, 16, 16, 16);
+        const t5 = performance.now();
+        timings.current["Parse circuit"] = t5 - t4;
         setCircuit(parsedCircuit);
 
         // Set up initial setup object
-        const setupObj = trinity.TrinityWasmSetup("Plain");
+        const t6 = performance.now();
+        //const setupObj = trinity.TrinityWasmSetup("Halo2");
+        const paramsResponse = await fetch("./halo2params.bin");
+        if (!paramsResponse.ok) {
+          throw new Error(
+            `Failed to fetch halo2params.bin: ${paramsResponse.statusText}`
+          );
+        }
+        const paramsBytes = new Uint8Array(await paramsResponse.arrayBuffer());
+        const setupObj = TrinityWasmSetup.from_full_params_bytes(paramsBytes);
+
+        console.log("Inspecting loaded setup object:", setupObj.inspect());
+
+        const t7 = performance.now();
+        timings.current["Create Trinity setup"] = t7 - t6;
         setSetup(setupObj);
 
         setComputationState("setup_done");
@@ -83,10 +107,13 @@ function App() {
     if (!trinity || !setup) return;
 
     try {
+      const t0 = performance.now();
       const evaluatorObj = trinity.TrinityEvaluator(
         setup,
         intToUint8Array2(evaluatorInput)
       );
+      const t1 = performance.now();
+      timings.current["Create evaluator"] = t1 - t0;
 
       setEvaluator(evaluatorObj);
       setComputationState("evaluator_committed");
@@ -101,12 +128,15 @@ function App() {
     if (!trinity || !setup || !evaluator || !circuit) return;
 
     try {
+      const t0 = performance.now();
       const garblerObj = trinity.TrinityGarbler(
         evaluator.commitment_serialized,
         setup,
         intToUint8Array2(garblerInput),
         circuit
       );
+      const t1 = performance.now();
+      timings.current["Create garbler"] = t1 - t0;
 
       setGarbler(garblerObj);
       setComputationState("circuit_garbled");
@@ -121,7 +151,31 @@ function App() {
     if (!evaluator || !garbler || !circuit) return;
 
     try {
+      const t0 = performance.now();
       const computationResult = evaluator.evaluate(garbler, circuit);
+      const t1 = performance.now();
+      timings.current["Evaluate circuit"] = t1 - t0;
+
+      console.log("BENCHMARK SUMMARY:");
+      const logOrder = [
+        "Import WASM module",
+        "Load circuit file",
+        "Parse circuit",
+        "Create Trinity setup",
+        "Create evaluator",
+        "Create garbler",
+        "Evaluate circuit",
+      ];
+
+      let totalExecutionTime = 0;
+      logOrder.forEach((key) => {
+        if (timings.current[key] !== undefined) {
+          console.log(`${key}: ${timings.current[key].toFixed(2)}ms`);
+          totalExecutionTime += timings.current[key];
+        }
+      });
+      console.log(`Total execution time: ${totalExecutionTime.toFixed(2)}ms`);
+
       console.log("Computation result:", computationResult);
       const resultAsInteger = booleanArrayToInteger(computationResult);
       setResult(resultAsInteger);
@@ -138,6 +192,12 @@ function App() {
     setGarbler(null);
     setResult(null);
     setError(null);
+    timings.current = {
+      ...timings.current,
+      "Create evaluator": 0,
+      "Create garbler": 0,
+      "Evaluate circuit": 0,
+    };
     setComputationState("setup_done");
   };
 

@@ -1,7 +1,7 @@
-use std::io::Write;
-
 use crate::{
-    kzg_commitment_with_halo2_proof, params::LaconicParams, poly_op::serialize_cubic_ext_field,
+    kzg_commitment_with_halo2_proof,
+    params::LaconicParams,
+    poly_op::{kzg_open, serialize_cubic_ext_field},
     Halo2Params,
 };
 use halo2_proofs::{
@@ -112,10 +112,6 @@ pub struct LaconicOTSender {
 
 impl LaconicOTRecv {
     pub fn new(halo2params: Halo2Params, bits: &[Choice]) -> Self {
-        let start_time = std::time::Instant::now();
-
-        // Measure time for element preparation
-        let prep_start = std::time::Instant::now();
         let elems: Vec<_> = bits
             .iter()
             .map(|b| {
@@ -126,49 +122,30 @@ impl LaconicOTRecv {
                 }
             })
             .collect();
-        let prep_duration = prep_start.elapsed();
-        println!("Element preparation took: {:?}", prep_duration);
-        std::io::stdout().flush().unwrap();
 
-        // Measure time for KZG commitment with Halo2 proof
-        let kzg_start = std::time::Instant::now();
         let circuit_params = halo2params.params.clone();
-        let circuit_output =
-            kzg_commitment_with_halo2_proof(circuit_params, elems.clone()).unwrap();
-        let kzg_duration = kzg_start.elapsed();
-        println!("KZG commitment with Halo2 proof took: {:?}", kzg_duration);
-        std::io::stdout().flush().unwrap();
+        let circuit_output = kzg_commitment_with_halo2_proof(circuit_params, elems.clone())
+            .expect("kzg_commitment_with_halo2_proof failed");
 
-        // Measure time for polynomial conversion
-        let poly_start = std::time::Instant::now();
-        let poly_duration = poly_start.elapsed();
-        println!("Polynomial conversion took: {:?}", poly_duration);
-        std::io::stdout().flush().unwrap();
-
-        // Measure time for domain point computation
-        let domain_start = std::time::Instant::now();
-        let domain_duration = domain_start.elapsed();
-        println!("Domain point computation took: {:?}", domain_duration);
-        std::io::stdout().flush().unwrap();
-
-        // Measure time for openings at the points
-        let openings_start = std::time::Instant::now();
-        let qs = crate::poly_op::all_openings_fk(
-            &halo2params.precomputed_y,
-            &halo2params.domain,
-            &elems,
-        );
-        // let qs: Vec<G1> = points
-        //     .iter()
-        //     .map(|&z| kzg_open(z, halo2params.clone(), elems.clone()))
-        //     .collect();
-        let openings_duration = openings_start.elapsed();
-        println!("Openings at the points took: {:?}", openings_duration);
-        std::io::stdout().flush().unwrap();
-
-        let total_duration = start_time.elapsed();
-        println!("Total process took: {:?}", total_duration);
-        std::io::stdout().flush().unwrap();
+        let domain_size = 1 << halo2params.k;
+        let mut elems_padded = elems.clone();
+        if elems_padded.len() < domain_size {
+            elems_padded.resize(domain_size, Fr::zero());
+        }
+        // let qs = crate::poly_op::all_openings_fk(
+        //     &halo2params.precomputed_y,
+        //     &halo2params.domain,
+        //     &elems_padded,
+        // )
+        // .expect("Failed to compute all openings FK");
+        let n = elems.clone().len();
+        let points: Vec<Fr> = (0..n)
+            .map(|i| halo2params.domain.get_omega().pow(&[i as u64]))
+            .collect();
+        let qs: Vec<G1> = points
+            .iter()
+            .map(|&z| kzg_open(z, halo2params.clone(), elems.clone()))
+            .collect();
 
         Self {
             qs,
@@ -367,7 +344,7 @@ mod tests {
     };
     use rand::{rngs::OsRng, Rng};
     use std::io::{self, Write};
-    use std::marker::PhantomData; // Add this import to bring the `Write` trait into scope
+    use std::marker::PhantomData;
     use std::time::Instant;
 
     fn generate_bitvector(size: usize) -> Vec<Choice> {
@@ -499,7 +476,8 @@ mod tests {
 
         // FK-style all-openings
         let fk_start = Instant::now();
-        let fk_qs = crate::poly_op::all_openings_fk(&y, &halo2params.domain, &elems);
+        let fk_qs = crate::poly_op::all_openings_fk(&y, &halo2params.domain, &elems)
+            .expect("Failed to compute all openings FK");
         println!("all_openings_fk openings took: {:?}", fk_start.elapsed());
 
         println!(
