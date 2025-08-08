@@ -1,5 +1,7 @@
 use crate::{
-    kzg_commitment_with_halo2_proof, params::LaconicParams, poly_op::serialize_cubic_ext_field,
+    kzg_commitment_with_halo2_proof,
+    params::LaconicParams,
+    poly_op::{kzg_open, serialize_cubic_ext_field},
     Halo2Params,
 };
 use halo2_proofs::{
@@ -131,20 +133,14 @@ impl LaconicOTRecv {
             elems_padded.resize(domain_size, Fr::zero());
         }
 
-        let qs = crate::poly_op::all_openings_fk(
-            &halo2params.precomputed_y,
-            &halo2params.domain,
-            &elems_padded,
-        )
-        .expect("Failed to compute all openings FK");
-        // let n = elems.clone().len();
-        // let points: Vec<Fr> = (0..n)
-        //     .map(|i| halo2params.domain.get_omega().pow(&[i as u64]))
-        //     .collect();
-        // let qs: Vec<G1> = points
-        //     .iter()
-        //     .map(|&z| kzg_open(z, halo2params.clone(), elems.clone()))
-        //     .collect();
+        let n = elems.clone().len();
+        let points: Vec<Fr> = (0..n)
+            .map(|i| halo2params.domain.get_omega().pow(&[i as u64]))
+            .collect();
+        let qs: Vec<G1> = points
+            .iter()
+            .map(|&z| kzg_open(z, halo2params.clone(), elems.clone()))
+            .collect();
 
         Self {
             qs,

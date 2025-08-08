@@ -217,7 +217,7 @@ impl Trinity {
             }
             KZGType::Halo2 => {
                 // To do: remove hardcoded k parameter
-                let halo2params = Halo2Params::setup(rng, 5).expect("Failed to setup Halo2Params");
+                let halo2params = Halo2Params::setup(rng, 8).expect("Failed to setup Halo2Params");
                 TrinityParams::Halo2(Arc::new(halo2params))
             }
         };
