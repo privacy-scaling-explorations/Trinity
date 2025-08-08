@@ -99,6 +99,7 @@ pub fn kzg_open(point: Fr, halo2params: Halo2Params, elems: Vec<Fr>) -> G1 {
         }
     }
     let poly_coeff = halo2params.domain.lagrange_to_coeff(a.clone());
+
     // Evaluate f at z.
     let f_z = eval_polynomial(&poly_coeff.values, point);
 
@@ -136,12 +137,11 @@ pub fn precompute_y(
     );
 
     // Construct hat_s = [powers[d-1],...,powers[0], d+2 zeros]
-    let mut hat_s = vec![G1::identity(); domain2_size];
-    for (i, p) in powers[..=d].iter().rev().enumerate() {
+    let mut hat_s = vec![G1::identity(); 2 * d + 2];
+    for (i, p) in powers[..d].iter().rev().enumerate() {
         hat_s[i] = (*p).into();
     }
 
-    // Perform FFT to get y
     best_fft(
         &mut hat_s,
         domain2.get_extended_omega(),
@@ -188,20 +188,19 @@ pub fn all_openings_fk(
     );
 
     // Step 1: Convert evals to coefficients
-    let mut coeffs = evals.to_vec();
-    best_fft(&mut coeffs, domain.get_omega_inv(), domain.k());
-    coeffs
-        .iter_mut()
-        .for_each(|c| *c *= domain.get_ifft_divisor());
+    let coeff_poly = domain.lagrange_to_coeff(Polynomial {
+        values: evals.to_vec(),
+        _marker: PhantomData,
+    });
+    let coeffs = coeff_poly.values;
 
     assert_eq!(coeffs.len(), d + 1, "coeffs should be of length d+1");
 
     // Step 2: Construct hat_c
-    let mut hat_c = vec![Fr::zero(); domain2_size];
-    hat_c[0] = coeffs[d];
-    hat_c[d + 1] = coeffs[d];
-    hat_c[(d + 2)..(2 * d + 2)].copy_from_slice(&coeffs[..d]);
-
+    let mut hat_c = vec![Fr::zero(); 2 * d + 2];
+    hat_c[0] = coeffs[d]; // c_d
+    hat_c[d + 1] = coeffs[d]; // c_d again
+    hat_c[(d + 2)..(2 * d + 2)].copy_from_slice(&coeffs[..d]); // c_0..c_{d-1}
     best_fft(
         &mut hat_c,
         domain2.get_extended_omega(),
@@ -225,11 +224,20 @@ pub fn all_openings_fk(
         .for_each(|x| *x *= domain2.get_extended_ifft_divisor());
 
     // Step 5: Normalize and truncate to domain size
-    let mut u_affine = vec![G1Affine::identity(); domain_size];
-    G1::batch_normalize(&u[..domain_size], &mut u_affine);
+    let domain_size = 1 << domain.k();
+    let d = domain_size - 1;
 
-    // Convert to projective (G1) and return
-    Ok(u_affine.iter().map(|p| G1::from(*p)).collect())
+    let mut h = vec![G1::identity(); domain_size];
+    for i in 0..d {
+        h[i] = u[i];
+    }
+    h[d] = G1::identity(); // zero for the x^d coeff
+
+    best_fft(&mut h, domain.get_omega(), domain.k());
+
+    let mut out_affine = vec![G1Affine::identity(); domain_size];
+    G1::batch_normalize(&h, &mut out_affine);
+    Ok(out_affine.iter().map(|p| G1::from(*p)).collect())
 }
 
 /// Compare FK20 openings with direct KZG openings
@@ -246,17 +254,28 @@ pub fn compare_fk_vs_kzg(halo2params: &Halo2Params, elems: &[Fr]) -> Result<(), 
     // Compute FK openings
     let fk_openings = all_openings_fk(&halo2params.precomputed_y, domain, &padded)?;
 
+    let omega = domain.get_omega();
+
     // Compare with direct KZG openings
     for i in 0..domain_size {
-        let z_i = domain.get_extended_omega().pow_vartime([i as u64]);
+        let z_i = domain.get_omega().pow_vartime([i as u64]);
 
-        let kzg = kzg_open(z_i, halo2params.clone(), padded.clone());
+        let kzg = kzg_open(z_i, halo2params.clone(), elems.to_vec());
         let fk = fk_openings[i];
 
-        if kzg != fk {
+        let z = omega.pow_vartime([i as u64]);
+
+        println!("z^{} = {:?}", i, z);
+        println!("KZG = {:?}", kzg);
+        println!("FK  = {:?}", fk);
+
+        let kzg_affine = G1Affine::from(kzg);
+        let fk_affine = G1Affine::from(fk);
+
+        if kzg_affine != fk_affine {
             println!(
                 "Mismatch at i = {}: \n  kzg = {:?}\n  fk  = {:?}",
-                i, kzg, fk
+                i, kzg_affine, fk_affine
             );
             return Err(format!("Mismatch at i = {}", i));
         }
@@ -264,4 +283,33 @@ pub fn compare_fk_vs_kzg(halo2params: &Halo2Params, elems: &[Fr]) -> Result<(), 
 
     println!("✅ FK and KZG openings match at all points.");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Halo2Params;
+    use halo2_proofs::poly::kzg::commitment::ParamsKZG;
+    use halo2curves::bn256::{Bn256, Fr};
+
+    #[test]
+    fn test_fk_openings_match_kzg_openings() {
+        let k = 4; // domain size 2^k = 16
+        let size = 1 << k;
+        let params: ParamsKZG<Bn256> = ParamsKZG::new(k);
+        let domain = EvaluationDomain::new(1, k);
+        let powers = &params.g[..size];
+        let precomputed_y = precompute_y(powers.as_ref(), &domain);
+
+        let elems = vec![Fr::from(0), Fr::from(1), Fr::from(0), Fr::from(1)];
+
+        let halo2params = Halo2Params {
+            k: k as usize,
+            params,
+            domain,
+            precomputed_y,
+        };
+
+        compare_fk_vs_kzg(&halo2params, &elems).unwrap();
+    }
 }
